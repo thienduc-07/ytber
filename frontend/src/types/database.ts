@@ -15,6 +15,8 @@ export interface Project {
   title: string;
   description: string | null;
   status: 'draft' | 'ready' | 'rendering' | 'completed';
+  video_type?: 'short-form' | 'long-form';
+  genre?: string;
   created_at: string;
   updated_at: string;
 }
@@ -50,31 +52,61 @@ export interface SceneAsset {
   license_type: string;
   author_name?: string;
   attribution_text?: string;
+  preview_url?: string;
+  full_url?: string;
+}
+
+export interface SoundDesignItem {
+  sfx_type: string;
+  description: string;
+  volume: number;
+  duck_narration: boolean;
 }
 
 export interface SceneItem {
   id?: string;
+  scene_id?: string;
   scene_order: number;
+  chapter_order?: number;
   scene_type: string;
   narration_text: string;
   duration_seconds: number;
   start_frame: number;
   end_frame: number;
   visual_method: 'photo' | 'stock' | 'archival' | 'map' | 'svg' | 'infographic' | 'procedural' | 'parallax' | 'toon';
+  visual_description?: string;
   visual_config: Record<string, any>;
   subtitles_json: SubtitleItem[];
   assets?: SceneAsset[];
+  audio_url?: string;
+  camera_direction?: string;
+  transition?: string;
+  sound_design?: SoundDesignItem[];
+  source_references?: string[];
+}
+
+export interface ChapterItem {
+  chapter_order: number;
+  title: string;
+  summary: string;
+  estimated_duration_seconds: number;
+  scene_count?: number;
+  scenes?: SceneItem[];
 }
 
 export interface SceneManifest {
   episode_id: string;
   title: string;
+  genre?: string;
+  video_format?: 'short-form' | 'long-form';
+  aspect_ratio?: string;
   total_duration_sec: number;
   total_frames: number;
   voice_config: VoiceConfig;
   video_specs: VideoSpecs;
   audio_specs: AudioSpecs;
   scenes: SceneItem[];
+  chapters?: ChapterItem[];
 }
 
 export interface Episode {
@@ -97,4 +129,19 @@ export interface UserQuota {
   usage_date: string;
   script_generations_count: number;
   tts_seconds_count: number;
+}
+
+export interface GenreInfo {
+  genre_id: string;
+  display_name: string;
+  description: string;
+  syllables_per_second: number;
+  preferred_visuals: string[];
+}
+
+export interface VoiceInfo {
+  id: string;
+  name: string;
+  gender: string;
+  locale: string;
 }

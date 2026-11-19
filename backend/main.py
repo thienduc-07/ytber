@@ -1,10 +1,12 @@
 import time
+from contextlib import asynccontextmanager
 from typing import Dict, Any
 from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from backend.core.config import settings
+from backend.core.database import init_db
 from backend.routers.script import router as script_router
 from backend.routers.assets import router as assets_router
 from backend.routers.tts import router as tts_router
@@ -55,10 +57,17 @@ class SecurityHeadersAndRateLimitMiddleware(BaseHTTPMiddleware):
         
         return response
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: ensure persistent database tables exist
+    await init_db()
+    yield
+
 app = FastAPI(
-    title="Zero-Budget AI Video Studio API",
-    description="Public multi-tenant API gateway for Vietnamese Shorts generation",
-    version="1.0.0",
+    title="YTBER — Unified AI Video Studio API",
+    description="Public multi-tenant API gateway for Short-form and Long-form AI Video Generation",
+    version="1.1.0",
+    lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
 )

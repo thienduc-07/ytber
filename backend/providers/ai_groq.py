@@ -46,11 +46,19 @@ class GroqScriptProvider(AIScriptProvider):
         self,
         script_text: str,
         target_duration: int = 60,
+        genre: str = "general",
+        video_format: str = "short-form",
         visual_style: str = "adaptive"
     ) -> ScriptAnalysisResult:
         if not self.api_key or self.api_key.startswith("placeholder-"):
-            # Fall back seamlessly to rule-based engine
-            return await self.fallback.analyze_script(script_text, target_duration, visual_style)
+            # Fall back seamlessly to rule-based engine with full genre intelligence
+            return await self.fallback.analyze_script(
+                script_text=script_text,
+                target_duration=target_duration,
+                genre=genre,
+                video_format=video_format,
+                visual_style=visual_style
+            )
             
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {
@@ -95,9 +103,13 @@ class GroqScriptProvider(AIScriptProvider):
                 ]
                 
                 total_duration = sum(s.duration_seconds for s in scenes)
+                aspect_ratio = "16:9" if video_format == "long-form" else "9:16"
                 
                 return ScriptAnalysisResult(
                     title=parsed.get("title", "Video Shorts Tiếng Việt"),
+                    genre=genre,
+                    video_format=video_format,
+                    aspect_ratio=aspect_ratio,
                     estimated_syllables=len(script_text.split()),
                     estimated_duration_seconds=round(total_duration, 1),
                     hook_summary=parsed.get("hook_summary", ""),
@@ -105,4 +117,10 @@ class GroqScriptProvider(AIScriptProvider):
                     ai_provider_used="groq-llama-3.3"
                 )
         except Exception:
-            return await self.fallback.analyze_script(script_text, target_duration, visual_style)
+            return await self.fallback.analyze_script(
+                script_text=script_text,
+                target_duration=target_duration,
+                genre=genre,
+                video_format=video_format,
+                visual_style=visual_style
+            )

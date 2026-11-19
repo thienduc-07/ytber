@@ -48,5 +48,28 @@ def test_invalid_signature_rejection():
 
 def test_malformed_token_rejection():
     with pytest.raises(HTTPException) as exc:
-        decode_and_verify_supabase_jwt("not.a.valid.jwt.token")
+        decode_and_verify_supabase_jwt("not.a.valid.jwt.token", secret="valid-secret-key-32-chars-long!!")
     assert exc.value.status_code == 401
+
+def test_fail_closed_when_secret_is_placeholder_or_missing():
+    payload = {"sub": "user-test", "exp": int(time.time()) + 3600}
+    token = create_test_jwt(payload, "any-secret")
+    
+    # Passing placeholder secret must fail closed with 401
+    with pytest.raises(HTTPException) as exc:
+        decode_and_verify_supabase_jwt(token, secret="placeholder-secret")
+    assert exc.value.status_code == 401
+    assert "cannot be performed" in exc.value.detail or "unconfigured" in exc.value.detail
+
+def test_algorithm_none_rejection():
+    # Attack vector: "alg": "none"
+    header = {"alg": "none", "typ": "JWT"}
+    payload = {"sub": "attacker", "exp": int(time.time()) + 3600}
+    h_b64 = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("=")
+    p_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    none_token = f"{h_b64}.{p_b64}."
+    
+    with pytest.raises(HTTPException) as exc:
+        decode_and_verify_supabase_jwt(none_token, secret="valid-secret-key-32-chars-long!!")
+    assert exc.value.status_code == 401
+    assert "algorithm" in exc.value.detail.lower()

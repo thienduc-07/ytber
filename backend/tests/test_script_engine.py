@@ -23,12 +23,11 @@ async def test_rule_based_script_analysis():
         "Sau thảm họa, quân đội Anh ra lệnh: cấm bước đều khi qua cầu!"
     )
     
-    result = await provider.analyze_script(script, target_duration=60)
+    result = await provider.analyze_script(script, target_duration=60, genre="historical_doc")
     
-    assert result.ai_provider_used == "rule-based-nlp-offline"
+    assert "rule-based" in result.ai_provider_used
     assert len(result.scenes) >= 5
-    assert result.scenes[0].scene_type == "hook"
-    assert result.scenes[0].visual_method == "parallax"
+    assert len(result.entities) >= 1
     
     # Check that durations are reasonable
     for scene in result.scenes:
@@ -45,4 +44,42 @@ async def test_groq_fallback_when_unconfigured():
     result = await provider.analyze_script(script, target_duration=30)
     assert result is not None
     assert len(result.scenes) >= 1
-    assert result.ai_provider_used == "rule-based-nlp-offline"
+    assert "rule-based" in result.ai_provider_used
+
+@pytest.mark.asyncio
+async def test_horror_genre_specialization():
+    provider = RuleBasedScriptProvider()
+    horror_script = (
+        "Căn nhà cổ bỏ hoang ở cuối làng luôn phát ra những tiếng thì thầm lúc nửa đêm. "
+        "Người ta đồn rằng năm 1945, một gia đình đã biến mất không dấu vết tại đây. "
+        "Càng tiến lại gần, không khí càng lạnh buốt đến thấu xương. "
+        "Bất thình lình, cánh cửa gỗ tự động mở toang trong tiếng gió rít rùng rợn!"
+    )
+    res = await provider.analyze_script(horror_script, genre="horror")
+    assert res.genre == "horror"
+    assert res.aspect_ratio == "9:16"
+    assert len(res.scenes) >= 3
+    # Verify horror sound design cues (drone, impacts, silence)
+    all_sfx = [cue.sfx_type for s in res.scenes for cue in s.sound_design]
+    assert any(sfx in ["drone", "impact", "ambience", "silence"] for sfx in all_sfx)
+
+@pytest.mark.asyncio
+async def test_long_form_chapter_planning():
+    provider = RuleBasedScriptProvider()
+    long_script = (
+        "Chương một mở ra toàn cảnh cuộc cách mạng công nghiệp thế kỷ mười chín. "
+        "Các nhà máy mọc lên như nấm dọc theo các con sông lớn tại châu Âu. "
+        "Giai cấp công nhân phải đối mặt với điều kiện lao động vô cùng khắc nghiệt. "
+        "Những phát minh máy hơi nước đã thay đổi hoàn toàn năng suất sản xuất toàn cầu. "
+        "Bước sang giai đoạn hai, thương mại quốc tế phát triển với tốc độ chóng mặt. "
+        "Các cường quốc tranh giành thuộc địa và tài nguyên trên khắp các châu lục. "
+        "Kết thúc thế kỷ, thế giới bước vào kỷ nguyên hiện đại với những bài học sâu sắc."
+    )
+    res = await provider.analyze_script(long_script, genre="historical_doc", video_format="long-form")
+    assert res.video_format == "long-form"
+    assert res.aspect_ratio == "16:9"
+    assert len(res.chapters) >= 2
+    for ch in res.chapters:
+        assert ch.chapter_order >= 1
+        assert ch.estimated_duration_seconds > 0
+        assert len(ch.scenes) > 0

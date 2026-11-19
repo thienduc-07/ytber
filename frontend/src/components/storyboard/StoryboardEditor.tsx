@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { SceneItem, SceneManifest, SceneAsset } from '../../types/database';
+import { apiClient } from '../../services/apiClient';
 import { 
   Plus, Trash2, Image as ImageIcon, Search, Check, Clock, Layers
 } from 'lucide-react';
@@ -93,40 +94,11 @@ export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
     if (!query.trim()) return;
     setIsSearching(true);
     try {
-      // Call backend asset search endpoint or fallback to simulated CC search
-      const res = await fetch(`/api/v1/assets/search?query=${encodeURIComponent(query)}&limit=8`);
-      if (res.ok) {
-        const data = await res.json();
-        setSearchResults(data.assets || []);
-      } else {
-        // Fallback realistic CC items
-        setSearchResults([
-          {
-            asset_type: 'image',
-            source_url: `https://images.unsplash.com/photo-1528127269322-539801943592?auto=format&fit=crop&w=1080&q=80`,
-            license_type: 'Public Domain / CC0',
-            author_name: 'Unsplash Library',
-            attribution_text: `Tư liệu mở: ${query}`,
-          },
-          {
-            asset_type: 'image',
-            source_url: `https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=1080&q=80`,
-            license_type: 'CC-BY-SA 4.0',
-            author_name: 'Wikimedia Commons Contributor',
-            attribution_text: `Wikimedia: ${query} (CC-BY)`,
-          }
-        ]);
-      }
-    } catch {
-      setSearchResults([
-        {
-          asset_type: 'image',
-          source_url: `https://images.unsplash.com/photo-1528127269322-539801943592?auto=format&fit=crop&w=1080&q=80`,
-          license_type: 'Public Domain / CC0',
-          author_name: 'Open Asset',
-          attribution_text: `Tư liệu mở: ${query}`,
-        }
-      ]);
+      const assets = await apiClient.searchAssets(query, 12);
+      setSearchResults(assets);
+    } catch (err: any) {
+      console.warn('Asset discovery API error:', err);
+      setSearchResults([]);
     } finally {
       setIsSearching(false);
     }

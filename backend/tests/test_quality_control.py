@@ -175,6 +175,21 @@ def test_validate_three_layer_audio(sample_animated_video):
     assert res["rms_energy"] > 0.01
 
 
+def test_validate_mandatory_voiceover(sample_animated_video):
+    """Verifies that mandatory voiceover detection validates active speech."""
+    res = QualityControlEngine.validate_mandatory_voiceover(sample_animated_video)
+    assert res["passed"] is True
+    assert res["speech_rms"] > 0.003
+    assert "Intelligible Voiceover Confirmed" in res["verdict"]
+
+
+def test_validate_environmental_soundscape(sample_animated_video):
+    """Verifies environmental soundscape check."""
+    res = QualityControlEngine.validate_environmental_soundscape(sample_animated_video, "tropical_forest")
+    assert "environment_checked" in res
+    assert res["environment_checked"] == "tropical_forest"
+
+
 def test_run_full_aqc(sample_animated_video):
     """Verifies end-to-end AQC report on a valid animated short."""
     report = QualityControlEngine.run_full_aqc(sample_animated_video)
@@ -183,4 +198,5 @@ def test_run_full_aqc(sample_animated_video):
     assert report["temporal_motion_check"]["passed"] is True
     assert report["animated_policy_check"]["passed"] is True
     assert report["audio_layers_check"]["passed"] is True
+    assert report["voiceover_check"]["passed"] is True
     assert "PASSED" in report["summary_verdict"]

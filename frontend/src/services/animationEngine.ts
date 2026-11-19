@@ -71,10 +71,16 @@ export class AnimationEngine {
       this.renderAnimatedCharactersAndProps(ctx, w, h, scene, localT, globalT, characterRegistry, isSpeaking);
     }
 
-    // 4. Render Foreground Environmental Particle Overlay
+    // 4. Foreground Occlusion & Framing Layer (Fast Parallax 1.35x for 2.5D Depth)
+    this.renderForegroundOcclusion(ctx, w, h, scene, localT, globalT);
+
+    // 5. Render Environmental Particle Overlay (Spores, Fireflies, Embers, Stars)
     this.renderParticles(ctx, w, h, scene, localT, globalT);
 
-    // 5. Cinematic Vignette
+    // 6. Volumetric Sunlight Shafts (God Rays)
+    this.renderVolumetricLight(ctx, w, h, scene, localT);
+
+    // 7. Cinematic Vignette
     this.renderCinematicVignette(ctx, w, h);
 
     ctx.restore();
@@ -161,9 +167,14 @@ export class AnimationEngine {
       ctx.fill();
     }
 
-    // Midground Parallax Layer 1: Distant Mountain / Skyline Silhouettes (Speed 0.2x)
+    const desc = ((scene.visual_description || '') + ' ' + (scene.narration_text || '')).toLowerCase();
+    const isForest = desc.includes('rừng') || desc.includes('forest') || desc.includes('cây') || desc.includes('lá');
+
+    // Midground Parallax Layer 1: Distant Mountain / Forest Ridge Silhouettes (Speed 0.2x)
     const bgParallax = (localT - 0.5) * (w * 0.05);
-    ctx.fillStyle = timeOfDay === 'night_moonlight' ? '#090d16' : '#271911';
+    ctx.fillStyle = isForest
+      ? (timeOfDay === 'night_moonlight' ? '#09150c' : '#14301a')
+      : (timeOfDay === 'night_moonlight' ? '#090d16' : '#271911');
     ctx.beginPath();
     ctx.moveTo(0, h * 0.65);
     const bgPoints = 12;
@@ -177,9 +188,11 @@ export class AnimationEngine {
     ctx.closePath();
     ctx.fill();
 
-    // Midground Parallax Layer 2: Closer Ridges / Fortifications / City (Speed 0.5x)
+    // Midground Parallax Layer 2: Closer Ridges / Fortifications / Jungle Trees (Speed 0.5x)
     const midParallax = (localT - 0.5) * (w * 0.12);
-    ctx.fillStyle = timeOfDay === 'night_moonlight' ? '#0f172a' : '#382216';
+    ctx.fillStyle = isForest
+      ? (timeOfDay === 'night_moonlight' ? '#0e2314' : '#1b3b20')
+      : (timeOfDay === 'night_moonlight' ? '#0f172a' : '#382216');
     ctx.beginPath();
     ctx.moveTo(0, h * 0.75);
     const midPoints = 14;
@@ -195,7 +208,9 @@ export class AnimationEngine {
 
     // Foreground Action Stage / Ground Hill (Speed 1.0x)
     const fgParallax = (localT - 0.5) * (w * 0.2);
-    ctx.fillStyle = timeOfDay === 'night_moonlight' ? '#1e293b' : '#22150c';
+    ctx.fillStyle = isForest
+      ? (timeOfDay === 'night_moonlight' ? '#122c19' : '#213818')
+      : (timeOfDay === 'night_moonlight' ? '#1e293b' : '#22150c');
     ctx.beginPath();
     ctx.moveTo(0, h * 0.82);
     ctx.quadraticCurveTo(w * 0.45 + fgParallax, h * 0.75, w, h * 0.84);
@@ -203,6 +218,15 @@ export class AnimationEngine {
     ctx.lineTo(0, h);
     ctx.closePath();
     ctx.fill();
+
+    // Stylized Bamboo / Forest Trunks for Dense Tropical Forest atmosphere
+    if (isForest) {
+      ctx.fillStyle = timeOfDay === 'night_moonlight' ? 'rgba(10, 25, 14, 0.75)' : 'rgba(20, 45, 24, 0.75)';
+      const trunkPositions = [w * 0.12, w * 0.85, w * 0.92];
+      for (const tx of trunkPositions) {
+        ctx.fillRect(tx + fgParallax * 0.8, h * 0.35, 18, h * 0.65);
+      }
+    }
   }
 
   /**
@@ -299,9 +323,26 @@ export class AnimationEngine {
     const walkPhase = Math.sin(localT * walkCycles * Math.PI * 2);
     const bobbing = Math.abs(walkPhase) * 12 * scale;
 
-    // 1. LEGS & BOOTS
+    // 0. DYNAMIC CONTACT SHADOW (Grounds the character on terrain, eliminating floating artifacts)
     const legLength = 110 * scale;
     const footY = legLength;
+    const shadowScale = 1 - Math.min(0.3, bobbing / (40 * scale));
+    const shadowWidth = 52 * scale * shadowScale;
+    const shadowHeight = 14 * scale * shadowScale;
+    const shadowY = footY + 6 * scale;
+
+    ctx.save();
+    const shadowGradient = ctx.createRadialGradient(0, shadowY, 2 * scale, 0, shadowY, shadowWidth);
+    shadowGradient.addColorStop(0, 'rgba(0, 0, 0, 0.55)');
+    shadowGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.25)');
+    shadowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = shadowGradient;
+    ctx.beginPath();
+    ctx.ellipse(0, shadowY, shadowWidth, shadowHeight, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // 1. LEGS & BOOTS
     ctx.lineWidth = 18 * scale;
     ctx.lineCap = 'round';
     ctx.strokeStyle = uniformColor;
@@ -359,6 +400,12 @@ export class AnimationEngine {
     ctx.roundRect(bodyX, bodyY, bodyW, bodyH, 12 * scale);
     ctx.fill();
 
+    // Directional 3D Rim Lighting on Torso (Highlights sunward edge)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+    ctx.beginPath();
+    ctx.roundRect(bodyX + 2 * scale, bodyY + 2 * scale, bodyW * 0.32, bodyH - 4 * scale, [10 * scale, 0, 0, 10 * scale]);
+    ctx.fill();
+
     // Leather belt and brass buckle
     ctx.fillStyle = beltColor;
     ctx.fillRect(bodyX, bodyY + bodyH * 0.65, bodyW, 12 * scale);
@@ -374,6 +421,13 @@ export class AnimationEngine {
     ctx.beginPath();
     ctx.arc(headX, headY, headRadius, 0, Math.PI * 2);
     ctx.fill();
+
+    // Directional 3D Rim Lighting on Head
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    ctx.lineWidth = 3.5 * scale;
+    ctx.beginPath();
+    ctx.arc(headX, headY, headRadius - 2 * scale, Math.PI * 0.8, Math.PI * 1.4);
+    ctx.stroke();
 
     // Expressive Eyes
     const eyeOffsetX = 9 * scale;
@@ -798,7 +852,138 @@ export class AnimationEngine {
         ctx.fillStyle = `rgba(56, 189, 248, ${alpha})`;
         ctx.fillRect(colX, headY, 4, 30);
       }
+    } else {
+      // Default / Forest: Floating luminous fireflies & pollen spores
+      const count = 28;
+      for (let i = 0; i < count; i++) {
+        const seed = i * 233.1;
+        const speedX = Math.sin(globalT * 1.5 + i) * 25;
+        const speedY = Math.cos(globalT * 1.2 + i * 2) * 15;
+        const px = ((seed * 17 + globalT * 12 + speedX) % w + w) % w;
+        const py = ((seed * 31 - globalT * 25 + speedY) % h + h) % h;
+        const pSize = 3 + (i % 3) * 2;
+        const alpha = 0.35 + Math.sin(globalT * 4 + i) * 0.35;
+
+        ctx.fillStyle = `rgba(250, 204, 21, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(px, py, pSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
+  }
+
+  /**
+   * Layer 4: Foreground Occlusion & Framing (Fast parallax 1.35x for cinematic 2.5D depth)
+   */
+  private static renderForegroundOcclusion(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    scene: SceneItem,
+    localT: number,
+    globalT: number
+  ) {
+    const desc = ((scene.visual_description || '') + ' ' + (scene.narration_text || '')).toLowerCase();
+    const fgParallax = (localT - 0.5) * (w * 0.35); // Fast parallax creates foreground depth
+
+    ctx.save();
+
+    if (desc.includes('rừng') || desc.includes('forest') || desc.includes('cây') || desc.includes('nature') || desc.includes('lá')) {
+      // Tropical Forest Foreground: Dangling vines and silhouette foliage
+      const sway = Math.sin(globalT * 2.2) * 12;
+
+      // Top-Left Overhanging Branch & Liana Vine
+      ctx.fillStyle = '#0f1f12';
+      ctx.beginPath();
+      ctx.moveTo(-40 + fgParallax, 0);
+      ctx.quadraticCurveTo(w * 0.25 + fgParallax + sway, h * 0.12, w * 0.35 + fgParallax, 0);
+      ctx.lineTo(-40, 0);
+      ctx.fill();
+
+      // Dangling vine
+      ctx.strokeStyle = '#182b1c';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.18 + fgParallax, h * 0.08);
+      ctx.quadraticCurveTo(w * 0.20 + fgParallax + sway, h * 0.28, w * 0.16 + fgParallax + sway * 1.5, h * 0.45);
+      ctx.stroke();
+
+      // Top-Right Palm Frond Silhouette
+      ctx.fillStyle = '#0a170d';
+      ctx.beginPath();
+      ctx.moveTo(w + 50 + fgParallax, 0);
+      ctx.quadraticCurveTo(w * 0.75 + fgParallax - sway, h * 0.18, w * 0.65 + fgParallax, 0);
+      ctx.lineTo(w + 50, 0);
+      ctx.fill();
+
+      // Bottom-Left and Bottom-Right Bush Silhouette
+      ctx.fillStyle = '#0c1a10';
+      ctx.beginPath();
+      ctx.arc(-20 + fgParallax, h + 30, 110, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(w + 30 + fgParallax, h + 40, 130, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Architectural / Framing Pillar Silhouette
+      ctx.fillStyle = 'rgba(10, 8, 16, 0.45)';
+      ctx.beginPath();
+      ctx.moveTo(-30 + fgParallax, 0);
+      ctx.lineTo(w * 0.08 + fgParallax, 0);
+      ctx.lineTo(w * 0.04 + fgParallax, h);
+      ctx.lineTo(-30, h);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * Layer 6: Volumetric Light Rays (Cinematic God Rays)
+   */
+  private static renderVolumetricLight(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    scene: SceneItem,
+    _localT: number
+  ) {
+    const desc = ((scene.visual_description || '') + ' ' + (scene.narration_text || '')).toLowerCase();
+    const env = scene.environment;
+    const timeOfDay = env?.time_of_day || 'sunset_golden';
+
+    if (timeOfDay === 'night_moonlight') return; // No golden rays at night
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+
+    const rayAngle = 0.45; // Radians angled down
+    const rayOriginX = w * 0.75;
+    const rayOriginY = h * 0.15;
+
+    // Draw 3 soft volumetric light beams
+    for (let r = 0; r < 3; r++) {
+      const beamOffset = r * (w * 0.14) - (w * 0.10);
+      const beamW = w * 0.16;
+
+      const grad = ctx.createLinearGradient(rayOriginX, rayOriginY, rayOriginX - h * Math.sin(rayAngle), h);
+      const isWarm = desc.includes('rừng') || timeOfDay === 'sunset_golden';
+      grad.addColorStop(0, isWarm ? 'rgba(254, 240, 138, 0.14)' : 'rgba(224, 242, 254, 0.10)');
+      grad.addColorStop(0.7, isWarm ? 'rgba(251, 146, 60, 0.04)' : 'rgba(186, 230, 253, 0.03)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(rayOriginX + beamOffset, rayOriginY);
+      ctx.lineTo(rayOriginX + beamOffset + beamW, rayOriginY);
+      ctx.lineTo(rayOriginX + beamOffset + beamW - h * Math.sin(rayAngle) * 0.6, h);
+      ctx.lineTo(rayOriginX + beamOffset - h * Math.sin(rayAngle) * 0.6, h);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.restore();
   }
 
   /**

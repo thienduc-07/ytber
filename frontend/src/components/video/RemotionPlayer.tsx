@@ -81,6 +81,30 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
         ? activeScene.narration_text.slice(0, 55) + '...'
         : activeScene.narration_text;
       ctx.fillText(displayText, w / 2, subY);
+
+      // 3. Render Commercial Affiliate CTA Overlay (if active)
+      if (manifest.affiliate_campaign?.product_name) {
+        const aff = manifest.affiliate_campaign;
+        const ctaY = Math.round(h * 0.12);
+        const ctaW = Math.round(w * 0.78);
+        const ctaH = 68;
+        const ctaX = Math.round((w - ctaW) / 2);
+
+        // Animated subtle pulse
+        const ctaPulse = Math.sin(localTime * 4) * 2;
+
+        ctx.fillStyle = 'rgba(234, 88, 12, 0.92)'; // Bright amber-orange
+        ctx.beginPath();
+        ctx.roundRect(ctaX, ctaY + ctaPulse, ctaW, ctaH, 16);
+        ctx.fill();
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 26px "Be Vietnam Pro", sans-serif';
+        ctx.fillText(`🛒 ${aff.product_name} • Nhấp link mô tả`, w / 2, ctaY + ctaPulse + ctaH / 2);
+      }
     }
   }, [localTime, manifest, isPlaying]);
 
@@ -109,13 +133,13 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
   }, [isPlaying, totalDuration, onTimeUpdate]);
 
   return (
-    <div className="flex flex-col items-center bg-studio-surface border border-studio-border rounded-2xl p-4 shadow-2xl">
-      {/* 9:16 Portrait Canvas Preview */}
-      <div className="relative aspect-[9/16] w-full max-w-[320px] bg-black rounded-xl overflow-hidden shadow-inner border border-studio-border">
+    <div className="flex flex-col items-center bg-studio-surface border border-studio-border rounded-2xl p-4 shadow-2xl w-full">
+      {/* Dynamic Aspect Ratio Canvas Preview (9:16 Shorts vs 16:9 Long-Form) */}
+      <div className={`relative ${manifest.video_format === 'long-form' ? 'aspect-[16/9] max-w-[420px]' : 'aspect-[9/16] max-w-[300px]'} w-full bg-black rounded-xl overflow-hidden shadow-inner border border-studio-border`}>
         <canvas
           ref={canvasRef}
-          width={1080}
-          height={1920}
+          width={manifest.video_specs?.width || 1080}
+          height={manifest.video_specs?.height || 1920}
           className="w-full h-full object-contain"
         />
         {/* Play overlay button when paused */}

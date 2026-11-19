@@ -136,6 +136,13 @@ export interface ChapterItem {
   scenes?: SceneItem[];
 }
 
+export interface AffiliateCampaign {
+  product_name: string;
+  affiliate_url: string;
+  cta_style: 'floating_banner' | 'corner_badge' | 'card_pop';
+  disclosure_text: string;
+}
+
 export interface SceneManifest {
   episode_id: string;
   title: string;
@@ -157,6 +164,7 @@ export interface SceneManifest {
   audio_specs: AudioSpecs;
   scenes: SceneItem[];
   chapters?: ChapterItem[];
+  affiliate_campaign?: AffiliateCampaign;
 }
 
 export interface Episode {

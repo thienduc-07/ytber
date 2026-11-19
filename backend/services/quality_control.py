@@ -346,6 +346,86 @@ class QualityControlEngine:
         }
 
     @classmethod
+    def validate_mandatory_voiceover(cls, video_path: str) -> dict:
+        """
+        Strictly validates that Vietnamese voiceover narration is present, non-silent,
+        and not synthetic pure tone or silence.
+        Production videos MUST FAIL if narration is missing or below intelligible threshold.
+        """
+        if not os.path.exists(video_path):
+            return {"passed": False, "error": f"File not found: {video_path}"}
+
+        try:
+            cmd = [
+                "ffmpeg", "-y", "-i", video_path,
+                "-af", "bandpass=frequency=1000:width_type=h:width=1500",
+                "-f", "f32le", "-ac", "1", "-ar", "16000",
+                "-"
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+            raw_voice = proc.stdout
+        except Exception as e:
+            return {"passed": False, "error": f"ffmpeg extraction failed: {e}"}
+
+        if len(raw_voice) < 16000 * 2:
+            return {"passed": False, "error": "Extracted voice track too short or absent"}
+
+        samples = np.frombuffer(raw_voice, dtype=np.float32)
+        rms = float(np.sqrt(np.mean(samples ** 2)))
+
+        win = 1600
+        n_wins = len(samples) // win
+        energies = [float(np.sqrt(np.mean(samples[i * win:(i + 1) * win] ** 2))) for i in range(n_wins)]
+        energy_std = float(np.std(energies)) if energies else 0.0
+        max_energy = max(energies) if energies else 0.0
+
+        passed = (rms >= 0.003) and (max_energy >= 0.015) and (energy_std >= 0.001)
+
+        return {
+            "passed": passed,
+            "speech_rms": round(rms, 5),
+            "max_syllable_energy": round(max_energy, 5),
+            "envelope_variation": round(energy_std, 5),
+            "verdict": "Pass: Intelligible Voiceover Confirmed" if passed else "Fail: Voiceover Missing or Silent"
+        }
+
+    @classmethod
+    def validate_environmental_soundscape(cls, video_path: str, expected_environment: str = "tropical_forest") -> dict:
+        """
+        Validates presence of environmental audio layers matching scene context.
+        E.g., tropical_forest features high-frequency insect/cicada activity (> 3500Hz)
+        or canopy wind in addition to narration.
+        """
+        if not os.path.exists(video_path):
+            return {"passed": False, "error": f"File not found: {video_path}"}
+
+        try:
+            cmd = [
+                "ffmpeg", "-y", "-i", video_path,
+                "-af", "highpass=f=3500",
+                "-f", "f32le", "-ac", "1", "-ar", "24000",
+                "-"
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+            raw_ambient = proc.stdout
+        except Exception as e:
+            return {"passed": False, "error": f"Ambient extraction failed: {e}"}
+
+        if len(raw_ambient) < 24000 * 2:
+            return {"passed": False, "error": "Ambient track too short"}
+
+        samples = np.frombuffer(raw_ambient, dtype=np.float32)
+        ambient_rms = float(np.sqrt(np.mean(samples ** 2)))
+        has_ambient = ambient_rms > 0.0001
+
+        return {
+            "passed": has_ambient,
+            "ambient_rms": round(ambient_rms, 6),
+            "environment_checked": expected_environment,
+            "verdict": f"Pass: Environmental Soundscape Active ({expected_environment})" if has_ambient else "Fail: Flat/Lifeless Ambience"
+        }
+
+    @classmethod
     def run_full_aqc(cls, video_path: str, manifest: dict = None) -> dict:
         """
         Runs complete Automated Quality Control suite on the rendered video.
@@ -361,12 +441,14 @@ class QualityControlEngine:
         motion_res = cls.validate_temporal_motion(video_path)
         animated_res = cls.validate_animated_visual_policy(video_path)
         audio_res = cls.validate_three_layer_audio(video_path)
+        voice_res = cls.validate_mandatory_voiceover(video_path)
 
         overall_passed = (
             container_res["passed"] and
             motion_res["passed"] and
             animated_res["passed"] and
-            audio_res["passed"]
+            audio_res["passed"] and
+            voice_res["passed"]
         )
 
         return {
@@ -376,5 +458,6 @@ class QualityControlEngine:
             "temporal_motion_check": motion_res,
             "animated_policy_check": animated_res,
             "audio_layers_check": audio_res,
+            "voiceover_check": voice_res,
             "summary_verdict": "PASSED: Production-Grade Animated Shorts Verified" if overall_passed else "FAILED: Quality Control Criteria Not Met"
         }

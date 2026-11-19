@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { SceneItem, SceneManifest, SceneAsset } from '../../types/database';
 import { apiClient } from '../../services/apiClient';
 import { 
-  Plus, Trash2, Image as ImageIcon, Search, Check, Clock, Layers
+  Plus, Trash2, Image as ImageIcon, Search, Check, Clock, Layers, Volume2
 } from 'lucide-react';
 
 interface StoryboardEditorProps {
@@ -13,15 +13,21 @@ interface StoryboardEditorProps {
 }
 
 const VISUAL_METHODS = [
-  { id: 'photo', label: 'Ảnh Tư Liệu / Chụp Thực' },
+  { id: 'toon', label: 'Hoạt Họa 2.5D (Articulated Rig & Parallax)' },
+  { id: 'map', label: 'Bản Đồ Vector & Tuyến Hành Quân' },
+  { id: 'infographic', label: 'Infographic Số Liệu & Biểu Đồ Động' },
+  { id: 'archival', label: 'Tư Liệu Trực Quan' },
+  { id: 'photo', label: 'Ảnh Minh Họa' },
   { id: 'stock', label: 'Thước Phim (Stock Footage)' },
-  { id: 'archival', label: 'Tư Liệu Lịch Sử' },
-  { id: 'map', label: 'Bản Đồ & Địa Lý' },
-  { id: 'svg', label: 'Minh Họa Vector (SVG)' },
-  { id: 'infographic', label: 'Infographic / Số Liệu' },
-  { id: 'procedural', label: 'Đồ Họa Thuật Toán' },
-  { id: 'parallax', label: '2.5D Parallax Chiều Sâu' },
-  { id: 'toon', label: 'Hoạt Họa 2D Đơn Sắc' },
+];
+
+const SOUNDSCAPE_PRESETS = [
+  { id: 'tropical_forest', label: '🌲 Rừng nhiệt đới (Ve sầu, gió tán lá, chim, bước chân lá)' },
+  { id: 'mountain_battlefield', label: '⚔️ Chiến trường đèo núi (Gió hú, rền đại bác, bước chân bùn)' },
+  { id: 'financial_floor', label: '📈 Thị trường tài chính (Chuông vàng, văn phòng giao dịch)' },
+  { id: 'cyber_tech_lab', label: '💻 Phòng công nghệ (Server hum, data stream)' },
+  { id: 'deep_space', label: '🚀 Vũ trụ / Thiên văn (Sub-bass, cosmic wash)' },
+  { id: 'green_wind_farm', label: '🍃 Đồng cỏ sinh thái (Gió turbine, thiên nhiên xanh)' },
 ];
 
 export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
@@ -217,29 +223,50 @@ export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
                 placeholder="Lời thuyết minh tiếng Việt cho cảnh này..."
               />
 
-              {/* Visual modality selector */}
-              <div className="mt-2.5 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400">Phong cách hình ảnh:</span>
+              {/* Visual modality & Soundscape selectors */}
+              <div className="mt-2.5 flex flex-col gap-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">Hình ảnh:</span>
+                    <select
+                      value={scene.visual_method}
+                      onChange={(e) => handleUpdateScene(idx, { visual_method: e.target.value as any })}
+                      className="bg-studio-bg border border-studio-border rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-studio-primary"
+                    >
+                      {VISUAL_METHODS.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {scene.assets && scene.assets[0] && (
+                    <div className="flex items-center gap-1.5 text-gray-400 text-[11px] truncate max-w-xs">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
+                      <span className="truncate">{scene.assets[0].attribution_text || scene.assets[0].license_type}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Environmental Soundscape Selector */}
+                <div className="flex items-center gap-2 pt-1 border-t border-studio-border/50">
+                  <span className="text-gray-400 flex items-center gap-1">
+                    <Volume2 className="w-3 h-3 text-studio-accent" />
+                    Âm thanh môi trường:
+                  </span>
                   <select
-                    value={scene.visual_method}
-                    onChange={(e) => handleUpdateScene(idx, { visual_method: e.target.value as any })}
-                    className="bg-studio-bg border border-studio-border rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-studio-primary"
+                    value={scene.music_direction || 'tropical_forest'}
+                    onChange={(e) => handleUpdateScene(idx, { music_direction: e.target.value })}
+                    className="flex-1 bg-studio-bg border border-studio-border rounded px-2 py-1 text-xs text-emerald-300 focus:outline-none focus:border-studio-primary font-medium"
                   >
-                    {VISUAL_METHODS.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
+                    {SOUNDSCAPE_PRESETS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
                       </option>
                     ))}
                   </select>
                 </div>
-
-                {scene.assets && scene.assets[0] && (
-                  <div className="flex items-center gap-1.5 text-gray-400 text-[11px] truncate max-w-xs">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
-                    <span className="truncate">{scene.assets[0].attribution_text || scene.assets[0].license_type}</span>
-                  </div>
-                )}
               </div>
             </div>
           );

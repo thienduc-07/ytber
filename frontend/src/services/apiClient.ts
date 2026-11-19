@@ -1,9 +1,10 @@
 import { supabase } from './supabase';
 import type { Project, SceneManifest, SceneAsset, GenreInfo, VoiceInfo } from '../types/database';
 
-const API_BASE = '/api/v1';
+const rawBase = (import.meta.env.VITE_API_BASE_URL as string) || '';
+const API_BASE = rawBase ? (rawBase.endsWith('/api/v1') ? rawBase : `${rawBase.replace(/\/$/, '')}/api/v1`) : '/api/v1';
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
+export async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -15,16 +16,73 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
       headers['Authorization'] = `Bearer ${token}`;
     } else {
       // Local development or unauthenticated fallback token
-      const localToken = localStorage.getItem('ytber_access_token');
+      const localToken = localStorage.getItem('ytber_access_token') || localStorage.getItem('ytber_guest_token');
       if (localToken) {
         headers['Authorization'] = `Bearer ${localToken}`;
+      } else {
+        const guestToken = 'demo-guest-session-token';
+        localStorage.setItem('ytber_guest_token', guestToken);
+        headers['Authorization'] = `Bearer ${guestToken}`;
       }
     }
   } catch (e) {
     console.warn('Could not read auth session for API request:', e);
+    headers['Authorization'] = 'Bearer demo-guest-session-token';
   }
 
   return headers;
+}
+
+export interface ResearchFact {
+  statement: string;
+  source_name: string;
+  source_url: string;
+  fact_type: string;
+}
+
+export interface ResearchEntity {
+  name: string;
+  entity_type: string;
+  significance: string;
+  animated_representation: string;
+}
+
+export interface NarrativeStrategy {
+  hook_angle: string;
+  core_conflict: string;
+  climax_point: string;
+  takeaway_message: string;
+  pacing_guidelines: string;
+}
+
+export interface TopicResearchReport {
+  topic: string;
+  subject: string;
+  category: string;
+  target_audience: string;
+  context: string;
+  verified_facts: ResearchFact[];
+  key_entities: ResearchEntity[];
+  storytelling_angles: string[];
+  misconceptions: string[];
+  claims_needing_verification: string[];
+  narrative_strategy: NarrativeStrategy;
+  recommended_duration_sec: number;
+  recommended_style: string;
+}
+
+export interface AffiliateContentPlan {
+  product_name: string;
+  product_category: string;
+  affiliate_url: string;
+  target_platform: string;
+  storytelling_hook: string;
+  feature_highlights: string[];
+  honest_limitations: string;
+  comparison_angle: string;
+  cta_text: string;
+  disclosure_statement: string;
+  qr_code_enabled: boolean;
 }
 
 export interface AnalyzeScriptParams {
@@ -105,6 +163,41 @@ export const apiClient = {
       throw new Error(err.detail || `Phân tích kịch bản thất bại (${res.status})`);
     }
 
+    return await res.json();
+  },
+
+  // 2.1 AI Content Research & Narrative Intelligence
+  async researchTopic(topic: string, category?: string): Promise<TopicResearchReport> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/research/topic`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ topic, category: category || 'general' }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Nghiên cứu chủ đề thất bại (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  // 2.2 Commercial Content & Affiliate Engine
+  async generateAffiliatePlan(params: {
+    product_name: string;
+    product_category: string;
+    affiliate_url: string;
+    target_platform?: string;
+  }): Promise<AffiliateContentPlan> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/research/affiliate-plan`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Tạo kế hoạch tiếp thị thất bại (${res.status})`);
+    }
     return await res.json();
   },
 
@@ -223,7 +316,11 @@ export const apiClient = {
       throw new Error(err.detail || `Lồng tiếng thất bại (${res.status})`);
     }
 
-    return await res.json();
+    const data: TTSResponse = await res.json();
+    if (data.audio_url && data.audio_url.startsWith('/') && rawBase) {
+      data.audio_url = `${rawBase.replace(/\/$/, '')}${data.audio_url}`;
+    }
+    return data;
   },
 
   // 5. Projects CRUD

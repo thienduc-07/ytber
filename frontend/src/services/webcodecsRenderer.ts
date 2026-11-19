@@ -2,6 +2,7 @@ import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import type { SceneManifest, SceneItem, SubtitleItem } from '../types/database';
 import { AnimationEngine } from './animationEngine';
 import { SoundDesignEngine } from './soundDesignEngine';
+import { getAuthHeaders } from './apiClient';
 
 export interface RenderProgressEvent {
   percent: number;
@@ -71,7 +72,8 @@ export class WebCodecsRenderer {
   }
 
   /**
-   * Preloads and decodes actual audio files into PCM AudioBuffers
+   * Preloads and decodes actual audio files into PCM AudioBuffers.
+   * Strictly enforces real speech availability: fails if narration audio cannot be loaded.
    */
   private async preloadAudioBuffers(
     manifest: SceneManifest,
@@ -79,6 +81,7 @@ export class WebCodecsRenderer {
     onProgress?: (status: string) => void
   ): Promise<Map<number, AudioBuffer | null>> {
     const buffers = new Map<number, AudioBuffer | null>();
+    const authHeaders = await getAuthHeaders();
 
     for (let i = 0; i < manifest.scenes.length; i++) {
       if (this.cancelled) break;
@@ -87,20 +90,32 @@ export class WebCodecsRenderer {
 
       if (audioUrl) {
         if (onProgress) {
-          onProgress(`Đang tải giọng đọc AI cảnh ${i + 1}/${manifest.scenes.length}...`);
+          onProgress(`Đang nạp giọng đọc AI cảnh ${i + 1}/${manifest.scenes.length}...`);
         }
         try {
-          const res = await fetch(audioUrl);
+          const res = await fetch(audioUrl, { headers: authHeaders });
           if (res.ok) {
             const arrayBuf = await res.arrayBuffer();
+            if (arrayBuf.byteLength < 100) {
+              throw new Error(`Tệp âm thanh cảnh ${i + 1} quá nhỏ hoặc rỗng (${arrayBuf.byteLength} bytes)`);
+            }
             const decoded = await audioCtx.decodeAudioData(arrayBuf);
+            if (decoded.length === 0 || decoded.duration < 0.1) {
+              throw new Error(`Tệp âm thanh cảnh ${i + 1} không chứa tín hiệu giọng đọc hợp lệ`);
+            }
             buffers.set(i, decoded);
             continue;
+          } else {
+            throw new Error(`Máy chủ từ chối tải tệp âm thanh (Mã lỗi HTTP ${res.status})`);
           }
-        } catch (err) {
-          console.warn(`Could not decode audio for scene ${i + 1} (${audioUrl}):`, err);
+        } catch (err: any) {
+          console.error(`Không thể giải mã tệp âm thanh cảnh ${i + 1} (${audioUrl}):`, err);
+          throw new Error(`Lỗi tải giọng đọc cảnh ${i + 1}: ${err.message}. Yêu cầu phải có giọng đọc thực tế để sản xuất video.`);
         }
+      } else if (scene.narration_text && scene.narration_text.trim().length > 10) {
+        throw new Error(`Cảnh ${i + 1} có lời thoại nhưng chưa được lồng tiếng. Vui lòng bấm 'Lồng Tiếng Các Cảnh' trước khi kết xuất.`);
       }
+
       buffers.set(i, null);
     }
 
@@ -409,6 +424,11 @@ export class WebCodecsRenderer {
           // Render Animated Vietnamese Karaoke Subtitles (Synced with Phase 2 Word Boundaries)
           this.renderSubtitles(ctx, width, height, scene, localT);
 
+          // Render Commercial Affiliate CTA & Disclosure Overlay (if configured)
+          if (manifest.affiliate_campaign?.product_name) {
+            this.renderAffiliateCTA(ctx, width, height, manifest.affiliate_campaign, globalT);
+          }
+
           // Create and encode VideoFrame
           const timestampMicro = Math.round((globalFrame * 1_000_000) / fps);
           const durationMicro = Math.round(1_000_000 / fps);
@@ -628,5 +648,47 @@ export class WebCodecsRenderer {
 
       startX += wordWidths[idx] + spaceWidth;
     }
+  }
+
+  /**
+   * Renders Commercial Affiliate CTA & Transparent Disclosure Badge
+   */
+  private renderAffiliateCTA(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    affiliate: { product_name: string; cta_style?: string; disclosure_text?: string },
+    globalT: number
+  ) {
+    const ctaY = Math.round(h * 0.12);
+    const ctaW = Math.round(w * 0.82);
+    const ctaH = Math.round(Math.min(w, h) * 0.08);
+    const ctaX = Math.round((w - ctaW) / 2);
+    const pulse = Math.sin(globalT * 3.5) * 2;
+
+    ctx.save();
+    // CTA Banner
+    ctx.fillStyle = 'rgba(234, 88, 12, 0.92)';
+    ctx.beginPath();
+    ctx.roundRect(ctaX, ctaY + pulse, ctaW, ctaH, 16);
+    ctx.fill();
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    const fontSize = Math.round(Math.min(w, h) * 0.032);
+    ctx.font = `bold ${fontSize}px "Be Vietnam Pro", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`🛒 ${affiliate.product_name} • Nhấp link mô tả`, w / 2, ctaY + pulse + ctaH / 2);
+
+    // Disclosure Notice
+    if (affiliate.disclosure_text) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.font = `italic ${Math.round(fontSize * 0.65)}px "Be Vietnam Pro", sans-serif`;
+      ctx.fillText(affiliate.disclosure_text, w / 2, ctaY + pulse + ctaH + 16);
+    }
+    ctx.restore();
   }
 }

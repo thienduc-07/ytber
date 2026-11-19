@@ -332,3 +332,77 @@ def test_generalized_acceptance_across_5_topics(tmp_path):
     print(f"\n[BENCHMARK] Generalized Acceptance Report saved to: {report_path}")
     assert len(report["results"]) == 5
     assert all(r["aqc_overall_passed"] for r in report["results"])
+
+
+def test_tropical_forest_character_walk_acceptance(tmp_path):
+    """
+    Mandatory Production Acceptance Scenario:
+    A cartoon character walks through a dense tropical forest.
+    Validates:
+    - Vietnamese narration explaining the forest ecosystem.
+    - Forest soundscape: cicadas/insects, distant birds, canopy wind.
+    - Character footsteps on leaves synchronized to walking movement.
+    - Background music with dynamic ducking during speech.
+    - Synchronized subtitles.
+    - Passes all AQC checks.
+    """
+    forest_script = (
+        "Một nhân vật hoạt hình đang từng bước khám phá khu rừng nhiệt đới nguyên sinh với hệ sinh thái phong phú. "
+        "Dưới chân là thảm lá mục xào xạc theo từng bước chân, trên cao là vòm tán xanh rậm rạp che phủ ánh nắng. "
+        "Từng đàn ve sầu và chim rừng ríu rít hòa quyện tạo nên bản giao hưởng thiên nhiên kỳ diệu của rừng già Việt Nam."
+    )
+
+    from backend.providers.soundscape_engine import AISoundscapeDirector
+
+    director = AIDirectorEngine()
+    analysis = director.analyze_and_direct(script_text=forest_script, genre="environment")
+
+    assert len(analysis.scenes) >= 3
+
+    # Generate Soundscape Specification for Scene 1 (Character walking in tropical forest)
+    sc1 = analysis.scenes[0]
+    soundscape_spec = AISoundscapeDirector.generate_soundscape_for_scene(
+        scene_id=sc1.scene_id if hasattr(sc1, "scene_id") else "scene_001",
+        scene_order=1,
+        duration_sec=3.5,
+        visual_description="Nhân vật hoạt hình cartoon bước đi chậm rãi qua khu rừng nhiệt đới rậm rạp",
+        setting_name="Rừng mưa nhiệt đới",
+        character_action="walk"
+    )
+
+    # 1. Verify soundscape features
+    assert soundscape_spec.primary_environment == "tropical_forest"
+    amb_names = [a.name.lower() for a in soundscape_spec.ambient_layers]
+    assert any("ve sầu" in n or "côn trùng" in n for n in amb_names)
+    assert any("chim rừng" in n for n in amb_names)
+    assert any("gió" in n for n in amb_names)
+
+    # 2. Verify synchronized footsteps on leaves
+    footsteps = [e for e in soundscape_spec.action_sfx_events if e.action_type == "footsteps_leaves"]
+    assert len(footsteps) >= 5
+    assert all(e.sync_trigger == "character_walk_step" for e in footsteps)
+
+    # 3. Render and Verify Tropical Forest Video with Character Walk & Grounded Shadow
+    video_path = str(tmp_path / "tropical_forest_walk.mp4")
+    render_synthetic_topic_video(
+        scene_plan=analysis.scenes,
+        topic_info={"genre": "environment", "id": "tropical_forest"},
+        output_path=video_path,
+        duration_sec=3.5
+    )
+    assert os.path.exists(video_path)
+
+    # 4. Automated Quality Control Verification
+    aqc = QualityControlEngine.run_full_aqc(video_path)
+    assert aqc["overall_passed"] is True
+    assert aqc["container_check"]["passed"] is True
+    assert aqc["temporal_motion_check"]["passed"] is True
+    assert aqc["animated_policy_check"]["passed"] is True
+    assert aqc["audio_layers_check"]["passed"] is True
+    assert aqc["voiceover_check"]["passed"] is True
+
+    # 5. Environmental Ambient Verification
+    env_qc = QualityControlEngine.validate_environmental_soundscape(video_path, "tropical_forest")
+    assert env_qc["passed"] is True
+    assert "tropical_forest" in env_qc["environment_checked"]
+

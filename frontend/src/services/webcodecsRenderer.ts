@@ -1,5 +1,5 @@
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
-import type { SceneManifest, SceneItem } from '../types/database';
+import type { SceneManifest, SceneItem, SubtitleItem } from '../types/database';
 
 export interface RenderProgressEvent {
   percent: number;
@@ -23,6 +23,86 @@ export class WebCodecsRenderer {
 
   public cancel() {
     this.cancelled = true;
+  }
+
+  /**
+   * Preloads and decodes image assets with createImageBitmap
+   */
+  private async preloadSceneAssets(
+    manifest: SceneManifest,
+    onProgress?: (status: string) => void
+  ): Promise<Map<number, ImageBitmap | null>> {
+    const bitmaps = new Map<number, ImageBitmap | null>();
+
+    for (let i = 0; i < manifest.scenes.length; i++) {
+      if (this.cancelled) break;
+      const scene = manifest.scenes[i];
+      const assetUrl =
+        scene.assets?.[0]?.local_url ||
+        scene.assets?.[0]?.source_url ||
+        scene.assets?.[0]?.preview_url ||
+        scene.visual_config?.imageUrl;
+
+      if (assetUrl) {
+        if (onProgress) {
+          onProgress(`Đang tải và giải mã hình ảnh cảnh ${i + 1}/${manifest.scenes.length}...`);
+        }
+        try {
+          const res = await fetch(assetUrl, { mode: 'cors' });
+          if (res.ok) {
+            const blob = await res.blob();
+            // Verify blob is an image
+            if (blob.type.startsWith('image/') || blob.size > 0) {
+              const bmp = await createImageBitmap(blob);
+              bitmaps.set(i, bmp);
+              continue;
+            }
+          }
+        } catch (err) {
+          console.warn(`Could not preload asset image for scene ${i + 1} (${assetUrl}):`, err);
+        }
+      }
+      bitmaps.set(i, null);
+    }
+
+    return bitmaps;
+  }
+
+  /**
+   * Preloads and decodes actual audio files into PCM AudioBuffers
+   */
+  private async preloadAudioBuffers(
+    manifest: SceneManifest,
+    audioCtx: AudioContext,
+    onProgress?: (status: string) => void
+  ): Promise<Map<number, AudioBuffer | null>> {
+    const buffers = new Map<number, AudioBuffer | null>();
+
+    for (let i = 0; i < manifest.scenes.length; i++) {
+      if (this.cancelled) break;
+      const scene = manifest.scenes[i];
+      const audioUrl = scene.audio_url;
+
+      if (audioUrl) {
+        if (onProgress) {
+          onProgress(`Đang tải giọng đọc AI cảnh ${i + 1}/${manifest.scenes.length}...`);
+        }
+        try {
+          const res = await fetch(audioUrl);
+          if (res.ok) {
+            const arrayBuf = await res.arrayBuffer();
+            const decoded = await audioCtx.decodeAudioData(arrayBuf);
+            buffers.set(i, decoded);
+            continue;
+          }
+        } catch (err) {
+          console.warn(`Could not decode audio for scene ${i + 1} (${audioUrl}):`, err);
+        }
+      }
+      buffers.set(i, null);
+    }
+
+    return buffers;
   }
 
   public async renderVideo(
@@ -56,6 +136,55 @@ export class WebCodecsRenderer {
     canvas.height = height;
     const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     if (!ctx) throw new Error('Could not acquire 2D canvas context');
+
+    // Preload Real Media Assets and Audio
+    if (onProgress) {
+      onProgress({
+        percent: 2,
+        currentFrame: 0,
+        totalFrames: totalFrames,
+        effectiveFps: 0,
+        estimatedRemainingSec: 0,
+        statusText: 'Đang chuẩn bị và nạp trước tư liệu hình ảnh...',
+      });
+    }
+
+    const preloadedBitmaps = await this.preloadSceneAssets(manifest, (statusText) => {
+      if (onProgress) {
+        onProgress({
+          percent: 5,
+          currentFrame: 0,
+          totalFrames: totalFrames,
+          effectiveFps: 0,
+          estimatedRemainingSec: 0,
+          statusText,
+        });
+      }
+    });
+
+    // Audio Context for PCM decoding
+    let audioCtx: AudioContext | null = null;
+    let preloadedAudios = new Map<number, AudioBuffer | null>();
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        audioCtx = new AudioContextClass({ sampleRate: 48000 });
+        preloadedAudios = await this.preloadAudioBuffers(manifest, audioCtx, (statusText) => {
+          if (onProgress) {
+            onProgress({
+              percent: 8,
+              currentFrame: 0,
+              totalFrames: totalFrames,
+              effectiveFps: 0,
+              estimatedRemainingSec: 0,
+              statusText,
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Web Audio Context initialization warning:', e);
+    }
 
     // Setup MP4 Muxer with Fast Start (in-memory) for video & audio tracks
     const muxer = new Muxer({
@@ -149,30 +278,56 @@ export class WebCodecsRenderer {
       });
       audioEncoder.configure(audioConfig);
 
-      // 1. Generate & Encode Audio Stems with dynamic ducking
-      // Note: This is procedural ambient/synth BGM bed for preview/PoC testing, not final voice-over
+      // 1. Generate & Mix Real Audio Stems (Narration PCM + Adaptive BGM Bed)
+      const finalPcmLeft = new Float32Array(totalAudioSamples);
+      const finalPcmRight = new Float32Array(totalAudioSamples);
+
+      let currentSampleOffset = 0;
+      for (let sIdx = 0; sIdx < manifest.scenes.length; sIdx++) {
+        const scene = manifest.scenes[sIdx];
+        const audioBuf = preloadedAudios.get(sIdx);
+        const sceneSampleLen = Math.round(scene.duration_seconds * sampleRate);
+
+        if (audioBuf) {
+          const chan0 = audioBuf.getChannelData(0);
+          const chan1 = audioBuf.numberOfChannels > 1 ? audioBuf.getChannelData(1) : chan0;
+          const copyLen = Math.min(audioBuf.length, totalAudioSamples - currentSampleOffset);
+
+          for (let s = 0; s < copyLen; s++) {
+            finalPcmLeft[currentSampleOffset + s] += chan0[s];
+            finalPcmRight[currentSampleOffset + s] += chan1[s];
+          }
+        }
+        currentSampleOffset += sceneSampleLen;
+      }
+
+      // Mix subtle rhythmic BGM bed with dynamic ducking (quieter during narration)
+      for (let i = 0; i < totalAudioSamples; i++) {
+        const t = i / sampleRate;
+        const narrationActive = Math.abs(finalPcmLeft[i]) > 0.05 || Math.abs(finalPcmRight[i]) > 0.05;
+        const bgmGain = narrationActive ? 0.03 : 0.08;
+
+        const bass = Math.sin(2 * Math.PI * 110 * t) * 0.15;
+        const sub = Math.sin(2 * Math.PI * 165 * t) * 0.08;
+        const bgmSample = (bass + sub) * bgmGain;
+
+        finalPcmLeft[i] = Math.max(-1.0, Math.min(1.0, finalPcmLeft[i] + bgmSample));
+        finalPcmRight[i] = Math.max(-1.0, Math.min(1.0, finalPcmRight[i] + bgmSample));
+      }
+
+      // Encode audio chunks
       let samplesProcessed = 0;
       while (samplesProcessed < totalAudioSamples) {
-        if (this.cancelled) {
-          throw new Error('Video rendering was cancelled');
-        }
-        if (encodingError) {
-          throw encodingError;
-        }
+        if (this.cancelled) throw new Error('Video rendering was cancelled');
+        if (encodingError) throw encodingError;
 
         const chunkSize = Math.min(48000, totalAudioSamples - samplesProcessed);
-        const pcm = new Float32Array(chunkSize * 2);
+        const pcmInterleaved = new Float32Array(chunkSize * 2);
 
         for (let i = 0; i < chunkSize; i++) {
-          const globalSampleIdx = samplesProcessed + i;
-          const t = globalSampleIdx / sampleRate;
-
-          // Synthesize rhythmic BGM bed (march / tension chord)
-          const bass = Math.sin(2 * Math.PI * 110 * t) * 0.12;
-          const rhythm = Math.sin(2 * Math.PI * 2 * t) > 0.8 ? 0.08 : 0.0;
-          const sample = bass + rhythm;
-          pcm[i * 2] = sample;
-          pcm[i * 2 + 1] = sample;
+          const idx = samplesProcessed + i;
+          pcmInterleaved[i * 2] = finalPcmLeft[idx];
+          pcmInterleaved[i * 2 + 1] = finalPcmRight[idx];
         }
 
         const timestampMicro = Math.round((samplesProcessed * 1_000_000) / sampleRate);
@@ -182,7 +337,7 @@ export class WebCodecsRenderer {
           numberOfFrames: chunkSize,
           numberOfChannels: 2,
           timestamp: timestampMicro,
-          data: pcm,
+          data: pcmInterleaved,
         });
 
         audioEncoder.encode(audioData);
@@ -193,11 +348,13 @@ export class WebCodecsRenderer {
 
       const startTime = performance.now();
 
-      // 2. Render & Encode Visual Frames
+      // 2. Render & Encode Visual Frames with Real Images and Animated Subtitles
       let sceneStartFrame = 0;
       for (let sIdx = 0; sIdx < manifest.scenes.length; sIdx++) {
         const scene = manifest.scenes[sIdx];
         const sceneFrames = sceneFrameCounts[sIdx];
+        const currentBmp = preloadedBitmaps.get(sIdx);
+        const nextBmp = sIdx + 1 < manifest.scenes.length ? preloadedBitmaps.get(sIdx + 1) : null;
 
         for (let f = 0; f < sceneFrames; f++) {
           if (this.cancelled) {
@@ -211,11 +368,29 @@ export class WebCodecsRenderer {
           const globalT = globalFrame / fps;
           const localT = f / sceneFrames;
 
-          // Render visual layer
-          this.renderSceneVisuals(ctx, width, height, scene, localT, globalT);
+          // Render Real Image or Fallback Visuals
+          if (currentBmp) {
+            this.renderImageWithKenBurns(ctx, currentBmp, width, height, localT);
+          } else {
+            this.renderFallbackVisuals(ctx, width, height, scene, localT, globalT);
+          }
 
-          // Render animated Vietnamese subtitles
+          // Scene Transition (Crossfade in last 15 frames if dissolve/fade)
+          const transitionFrames = 15;
+          const framesRemaining = sceneFrames - f;
+          if (framesRemaining <= transitionFrames && nextBmp && scene.transition !== 'cut') {
+            const blendAlpha = (transitionFrames - framesRemaining) / transitionFrames;
+            ctx.save();
+            ctx.globalAlpha = Math.min(1.0, Math.max(0.0, blendAlpha));
+            this.renderImageWithKenBurns(ctx, nextBmp, width, height, 0);
+            ctx.restore();
+          }
+
+          // Render Animated Vietnamese Karaoke Subtitles (Synced with Phase 2 Word Boundaries)
           this.renderSubtitles(ctx, width, height, scene, localT);
+
+          // Render Scene Order and Method Badge
+          this.renderBadge(ctx, width, height, scene, currentBmp !== null);
 
           // Create and encode VideoFrame
           const timestampMicro = Math.round((globalFrame * 1_000_000) / fps);
@@ -254,7 +429,7 @@ export class WebCodecsRenderer {
               totalFrames: totalFrames,
               effectiveFps: Math.round(currentFps),
               estimatedRemainingSec: Math.round(estRemaining),
-              statusText: `Đang kết xuất khung hình ${globalFrame + 1}/${totalFrames} (Cảnh: ${scene.scene_type})`,
+              statusText: `Đang kết xuất khung hình ${globalFrame + 1}/${totalFrames} (Cảnh ${scene.scene_order}: ${currentBmp ? 'Hình ảnh thực' : 'Đồ họa'})`,
             });
           }
         }
@@ -298,7 +473,7 @@ export class WebCodecsRenderer {
           totalFrames: totalFrames,
           effectiveFps: Math.round(finalFps),
           estimatedRemainingSec: 0,
-          statusText: 'Hoàn tất kết xuất video MP4!',
+          statusText: 'Hoàn tất kết xuất video MP4 với hình ảnh và âm thanh thực!',
         });
       }
 
@@ -310,18 +485,35 @@ export class WebCodecsRenderer {
         fileSizeBytes: outputBlob.size,
       };
     } finally {
+      // Clean up ImageBitmap resources to prevent memory leaks
+      preloadedBitmaps.forEach((bmp) => {
+        if (bmp) {
+          try {
+            bmp.close();
+          } catch {
+            // ignore
+          }
+        }
+      });
+      if (audioCtx && audioCtx.state !== 'closed') {
+        try {
+          audioCtx.close();
+        } catch {
+          // ignore
+        }
+      }
       if (videoEncoder && videoEncoder.state !== 'closed') {
         try {
           videoEncoder.close();
         } catch {
-          // ignore already closed
+          // ignore
         }
       }
       if (audioEncoder && audioEncoder.state !== 'closed') {
         try {
           audioEncoder.close();
         } catch {
-          // ignore already closed
+          // ignore
         }
       }
       canvas.width = 0;
@@ -329,15 +521,57 @@ export class WebCodecsRenderer {
     }
   }
 
-  private renderSceneVisuals(
+  /**
+   * Renders real image with cover aspect ratio fitting and smooth Ken Burns motion
+   */
+  private renderImageWithKenBurns(
+    ctx: CanvasRenderingContext2D,
+    img: ImageBitmap,
+    w: number,
+    h: number,
+    t: number // 0 to 1
+  ) {
+    const zoom = 1.0 + t * 0.12; // 12% subtle continuous push-in
+    const panX = (t - 0.5) * (img.width * 0.05); // subtle 5% pan
+    const panY = (t - 0.5) * (img.height * 0.03);
+
+    const imgAspect = img.width / img.height;
+    const targetAspect = w / h;
+    let sW: number, sH: number, sX: number, sY: number;
+
+    if (imgAspect > targetAspect) {
+      sH = img.height / zoom;
+      sW = sH * targetAspect;
+    } else {
+      sW = img.width / zoom;
+      sH = sW / targetAspect;
+    }
+
+    sX = Math.max(0, Math.min(img.width - sW, (img.width - sW) / 2 + panX));
+    sY = Math.max(0, Math.min(img.height - sH, (img.height - sH) / 2 + panY));
+
+    // Clear and draw image
+    ctx.drawImage(img, sX, sY, sW, sH, 0, 0, w, h);
+
+    // Subtle edge vignette overlay
+    const vignette = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.4, w / 2, h / 2, Math.max(w, h) * 0.8);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.45)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  /**
+   * Renders visually meaningful fallback graphic card when asset is pending or unavailable
+   */
+  private renderFallbackVisuals(
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
     scene: SceneItem,
-    t: number,
+    _t: number,
     globalT: number
   ) {
-    // Background gradient conforming to Day / Tension color system
     const grad = ctx.createLinearGradient(0, 0, w, h);
     if (scene.visual_method === 'archival') {
       grad.addColorStop(0, '#2b231d');
@@ -354,94 +588,55 @@ export class WebCodecsRenderer {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
 
-    // Dynamic Ken Burns Zoom & Pan
-    const zoom = 1.0 + t * 0.12;
-    ctx.save();
-    ctx.translate(w / 2, h / 2);
-    ctx.scale(zoom, zoom);
-    ctx.translate(-w / 2, -h / 2);
+    // Focal card with description
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.roundRect(120, 350, w - 240, h / 2, 32);
+    ctx.fill();
+    ctx.strokeStyle = '#FFB36B';
+    ctx.lineWidth = 4;
+    ctx.stroke();
 
-    // Visual Modality Graphics
-    switch (scene.visual_method) {
-      case 'infographic':
-        // Animated statistic ring
-        ctx.beginPath();
-        ctx.arc(w / 2, h / 2 - 150, 220, -Math.PI / 2, -Math.PI / 2 + t * Math.PI * 2);
-        ctx.strokeStyle = '#FFDF00';
-        ctx.lineWidth = 18;
-        ctx.stroke();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 36px "Be Vietnam Pro", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('TƯ LIỆU MINH HỌA', w / 2, 450);
 
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 96px "Be Vietnam Pro", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${Math.round(t * 74)}`, w / 2, h / 2 - 120);
-        ctx.font = '500 36px "Lexend", sans-serif';
-        ctx.fillStyle = '#FFB36B';
-        ctx.fillText('NGƯỜI LÍNH', w / 2, h / 2 - 50);
-        break;
-
-      case 'map':
-        // Vector grid & route line
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.lineWidth = 2;
-        for (let x = 100; x < w; x += 150) {
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, h);
-          ctx.stroke();
-        }
-        for (let y = 100; y < h; y += 150) {
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(w, y);
-          ctx.stroke();
-        }
-        // Animated trajectory path
-        ctx.beginPath();
-        ctx.moveTo(w / 2 - 300, h / 2);
-        ctx.quadraticCurveTo(w / 2, h / 2 - 200, w / 2 - 300 + t * 600, h / 2);
-        ctx.strokeStyle = '#00E5FF';
-        ctx.lineWidth = 10;
-        ctx.stroke();
-        break;
-
-      case 'svg':
-      case 'procedural':
-        // Frequency wave mechanics
-        ctx.beginPath();
-        for (let x = 100; x < w - 100; x += 10) {
-          const y = h / 2 - 100 + Math.sin(x / 80 + globalT * 6) * (60 * (1 + t));
-          if (x === 100) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.strokeStyle = '#FF453A';
-        ctx.lineWidth = 8;
-        ctx.stroke();
-        break;
-
-      default:
-        // Focal vignette card
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.roundRect(120, 350, w - 240, h / 2, 32);
-        ctx.fill();
-        ctx.strokeStyle = '#FFB36B';
-        ctx.lineWidth = 4;
-        ctx.stroke();
-        break;
-    }
-    ctx.restore();
-
-    // Scene Label Badge
-    const badgeX = Math.round(w * 0.06);
-    const badgeY = Math.round(h * 0.06);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-    ctx.fillRect(badgeX, badgeY, 380, 70);
-    ctx.fillStyle = '#00FF66';
-    ctx.font = 'bold 26px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(`CẢNH ${scene.scene_order}: ${scene.visual_method.toUpperCase()}`, badgeX + 25, badgeY + 45);
+    ctx.fillStyle = '#A0AEC0';
+    ctx.font = '28px "Be Vietnam Pro", sans-serif';
+    const desc = scene.visual_description || scene.narration_text;
+    const shortDesc = desc.length > 70 ? desc.slice(0, 70) + '...' : desc;
+    ctx.fillText(shortDesc, w / 2, 520);
   }
 
+  /**
+   * Renders scene status badge
+   */
+  private renderBadge(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    scene: SceneItem,
+    hasRealAsset: boolean
+  ) {
+    const badgeX = Math.round(w * 0.06);
+    const badgeY = Math.round(h * 0.06);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.70)';
+    ctx.roundRect(badgeX, badgeY, 440, 70, 16);
+    ctx.fill();
+
+    ctx.fillStyle = hasRealAsset ? '#00FF66' : '#FFB36B';
+    ctx.font = 'bold 24px "Be Vietnam Pro", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(
+      `CẢNH ${scene.scene_order}: ${hasRealAsset ? 'TƯ LIỆU THỰC' : scene.visual_method.toUpperCase()}`,
+      badgeX + 25,
+      badgeY + 44
+    );
+  }
+
+  /**
+   * Renders synchronized Vietnamese animated subtitles using Phase 2 word cues
+   */
   private renderSubtitles(
     ctx: CanvasRenderingContext2D,
     w: number,
@@ -449,14 +644,38 @@ export class WebCodecsRenderer {
     scene: SceneItem,
     t: number
   ) {
-    const text = scene.narration_text;
-    const words = text.split(' ');
-    const activeWordIdx = Math.min(words.length - 1, Math.floor(t * words.length));
+    const text = scene.narration_text.trim();
+    if (!text) return;
+
+    // Check if word-level cues exist from Phase 2 Edge-TTS
+    const cues: SubtitleItem[] = scene.subtitles_json || [];
+    const localMs = Math.round(t * scene.duration_seconds * 1000);
+
+    let activeWordIndex = -1;
+    if (cues.length > 0) {
+      activeWordIndex = cues.findIndex((c) => localMs >= c.start_ms && localMs <= c.end_ms);
+      if (activeWordIndex === -1) {
+        // Fallback to closest preceding word
+        for (let i = cues.length - 1; i >= 0; i--) {
+          if (localMs >= cues[i].start_ms) {
+            activeWordIndex = i;
+            break;
+          }
+        }
+      }
+    }
+
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return;
+
+    if (activeWordIndex === -1) {
+      activeWordIndex = Math.min(words.length - 1, Math.floor(t * words.length));
+    }
 
     // Dynamic vertical positioning based on aspect ratio
     const y = Math.round(h * 0.78);
     const subH = Math.min(180, Math.round(h * 0.16));
-    const cardW = Math.round(w * 0.86);
+    const cardW = Math.round(w * 0.88);
     const cardX = Math.round((w - cardW) / 2);
 
     ctx.textAlign = 'center';
@@ -470,23 +689,38 @@ export class WebCodecsRenderer {
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Group text into chunks for readability
+    // Group text into phrases of 4 to 6 words for clear readability
     const wordsPerChunk = w > h ? 6 : 4;
-    const chunkStart = Math.floor(activeWordIdx / wordsPerChunk) * wordsPerChunk;
+    const chunkStart = Math.floor(activeWordIndex / wordsPerChunk) * wordsPerChunk;
     const currentChunk = words.slice(chunkStart, chunkStart + wordsPerChunk);
+    const relativeActive = activeWordIndex - chunkStart;
 
-    const fullStr = currentChunk.join(' ');
-    const fontSize = Math.round(Math.min(w, h) * 0.048);
+    const fontSize = Math.round(Math.min(w, h) * 0.046);
     ctx.font = `bold ${fontSize}px "Be Vietnam Pro", sans-serif`;
 
-    // Dark stroke outline
-    ctx.strokeStyle = '#050308';
-    ctx.lineWidth = 8;
-    ctx.lineJoin = 'round';
-    ctx.strokeText(fullStr, w / 2, y);
+    // Measure and render words with active karaoke word highlight
+    const spaceWidth = ctx.measureText(' ').width;
+    const wordWidths = currentChunk.map((wd) => ctx.measureText(wd).width);
+    const totalChunkWidth = wordWidths.reduce((a, b) => a + b, 0) + (currentChunk.length - 1) * spaceWidth;
 
-    // Active word highlight: bright yellow
-    ctx.fillStyle = '#FFDF00';
-    ctx.fillText(fullStr, w / 2, y);
+    let startX = (w - totalChunkWidth) / 2;
+
+    ctx.textAlign = 'left';
+    for (let idx = 0; idx < currentChunk.length; idx++) {
+      const wd = currentChunk[idx];
+      const isWordActive = idx === relativeActive;
+
+      // Dark stroke outline
+      ctx.strokeStyle = '#050308';
+      ctx.lineWidth = 8;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(wd, startX, y);
+
+      // Active word highlighted in bright yellow (#FFDF00), others in white (#FFFFFF)
+      ctx.fillStyle = isWordActive ? '#FFDF00' : '#FFFFFF';
+      ctx.fillText(wd, startX, y);
+
+      startX += wordWidths[idx] + spaceWidth;
+    }
   }
 }

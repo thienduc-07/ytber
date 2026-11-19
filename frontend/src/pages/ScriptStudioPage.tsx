@@ -6,7 +6,7 @@ import { RenderModal } from '../components/video/RenderModal';
 import { apiClient } from '../services/apiClient';
 import type { SceneManifest, SceneItem, Project, GenreInfo, VoiceInfo } from '../types/database';
 import { 
-  Sparkles, Play, ArrowLeft, Save, Sliders, Volume2, Mic, Film, Check, BookOpen, Layers, Music, Headphones
+  Sparkles, Play, ArrowLeft, Save, Sliders, Volume2, Mic, Film, Check, BookOpen, Layers, Music, Headphones, Image as ImageIcon
 } from 'lucide-react';
 
 const DEFAULT_SCRIPT = `Bạn có biết rằng, cách đây hơn 70 năm, tại một thung lũng lòng chảo ở Tây Bắc, quân và dân Việt Nam đã làm nên một kỳ tích chấn động địa cầu? Đó chính là chiến thắng Điện Biên Phủ lịch sử năm 1954. Dưới sự chỉ huy tài ba của Đại tướng Võ Nguyên Giáp, toàn quân ta đã kiên cường vượt mọi gian khổ, kéo pháo qua đèo cao, bạt núi mở đường để làm nên chiến công hiển hách lừng lẫy năm châu. Ngày 7 tháng 5 năm 1954, lá cờ Quyết chiến Quyết thắng tung bay trên nóc hầm De Castries, đánh dấu mốc son chói lọi trong lịch sử dân tộc! Hãy bấm đăng ký kênh để đón xem những câu chuyện lịch sử tự hào tiếp theo!`;
@@ -25,6 +25,7 @@ export const ScriptStudioPage: React.FC = () => {
   const [voiceRate, setVoiceRate] = useState('+0%');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSynthesizingVoice, setIsSynthesizingVoice] = useState(false);
+  const [isDiscoveringAssets, setIsDiscoveringAssets] = useState(false);
   const [isVoiceTesting, setIsVoiceTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeSceneIndex, setActiveSceneIndex] = useState(0);
@@ -349,6 +350,61 @@ export const ScriptStudioPage: React.FC = () => {
     }
   };
 
+  const handleAutoDiscoverAssets = async () => {
+    setIsDiscoveringAssets(true);
+    setNotice('Đang tự động tìm kiếm và tải tư liệu thực từ Wikimedia & Openverse...');
+
+    try {
+      const updatedScenes = [...manifest.scenes];
+      let matchedCount = 0;
+
+      for (let i = 0; i < updatedScenes.length; i++) {
+        const scene = updatedScenes[i];
+        if (scene.assets?.[0]?.local_url) continue;
+
+        const query =
+          (scene as any).search_keywords?.[0] ||
+          (scene as any).suggested_asset_keywords?.[0] ||
+          scene.visual_description?.split(' ')[0] ||
+          'Vietnam archival photography';
+
+        try {
+          const results = await apiClient.searchAssets(query, 5);
+          if (results.length > 0) {
+            const topAsset = results[0];
+            const downloaded = await apiClient.downloadAsset({
+              url: topAsset.source_url,
+              title: topAsset.attribution_text?.replace('Ảnh: ', '') || query,
+              creator: topAsset.author_name,
+              license_type: topAsset.license_type,
+              attribution_text: topAsset.attribution_text,
+            });
+
+            updatedScenes[i] = {
+              ...scene,
+              assets: [downloaded],
+              visual_config: { ...scene.visual_config, imageUrl: downloaded.local_url }
+            };
+            matchedCount++;
+          }
+        } catch (err) {
+          console.warn(`Lỗi tìm tư liệu cảnh ${i + 1}:`, err);
+        }
+      }
+
+      setManifest(prev => ({
+        ...prev,
+        scenes: updatedScenes,
+      }));
+      setNotice(`Đã tìm kiếm và ghép thành công tư liệu thực cho ${matchedCount} cảnh!`);
+    } catch (err: any) {
+      setNotice(`Lỗi tìm tư liệu tự động: ${err.message}`);
+    } finally {
+      setIsDiscoveringAssets(false);
+      setTimeout(() => setNotice(null), 3500);
+    }
+  };
+
   const handleSaveProject = async () => {
     setIsSaving(true);
     try {
@@ -547,6 +603,16 @@ export const ScriptStudioPage: React.FC = () => {
                 <span>{isSynthesizingVoice ? 'Đang lồng tiếng...' : 'Lồng Tiếng Các Cảnh'}</span>
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={handleAutoDiscoverAssets}
+              disabled={isDiscoveringAssets}
+              className="w-full py-2 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              <span>{isDiscoveringAssets ? 'Đang tìm & tải tư liệu thực...' : 'Tự Động Ghép Tư Liệu Thực'}</span>
+            </button>
 
             <button
               onClick={handleAnalyzeScript}

@@ -95,17 +95,42 @@ class RuleBasedScriptProvider(AIScriptProvider):
             )
 
         if profile.genre_id == "economics":
-            if any(w in t_lower for w in ["tỷ lệ", "phần trăm", "%", "tỷ usd", "doanh thu", "tăng trưởng", "lạm phát", "7.09"]):
+            # Specific industrial facilities, oil/energy, and physical assets
+            if any(w in t_lower for w in ["dầu", "giá dầu", "xăng dầu", "năng lượng", "opec", "crude oil", "khai thác"]):
+                return (
+                    "photo",
+                    "Cơ sở lọc hóa dầu công nghiệp quy mô lớn với các bồn chứa và giàn khoan ngoài khơi",
+                    ["crude oil refinery", "oil barrels petroleum", "oil trading market", "petroleum production facility"]
+                )
+            if any(w in t_lower for w in ["cảng", "container", "vận tải", "chuỗi cung ứng", "logistics", "xuất khẩu", "nhập khẩu"]):
+                return (
+                    "photo",
+                    "Cảng biển container quốc tế với cần cẩu xếp dỡ và tàu hàng siêu tải trọng",
+                    ["container port cargo ship", "logistics freight shipping", "global supply chain terminal"]
+                )
+            if any(w in t_lower for w in ["ngân hàng", "lãi suất", "tiền tệ", "lạm phát", "fed", "ngân hàng trung ương"]):
+                return (
+                    "photo",
+                    "Tòa nhà ngân hàng trung ương và sàn giao dịch tài chính với biểu đồ điện tử",
+                    ["central bank building", "stock exchange trading floor", "financial banking treasury"]
+                )
+            if any(w in t_lower for w in ["nhà máy", "sản xuất", "chế tạo", "công nghiệp", "dây chuyền"]):
+                return (
+                    "photo",
+                    "Dây chuyền sản xuất tự động hóa trong nhà máy công nghiệp hiện đại",
+                    ["automated factory production line", "modern manufacturing facility", "industrial robot assembly"]
+                )
+            if any(w in t_lower for w in ["tỷ lệ", "phần trăm", "%", "tỷ usd", "doanh thu", "tăng trưởng", "gdp", "chỉ số"]):
                 return (
                     "infographic",
                     "Biểu đồ số liệu động với bộ đếm tăng trưởng sắc nét, màu sắc tương phản cao",
-                    ["data graph economic growth", "financial stock market chart"]
+                    ["economic growth chart", "financial stock market graph", "macroeconomic data analysis"]
                 )
-            if any(w in t_lower for w in ["fdi", "doanh nghiệp", "thị trường", "xuất khẩu", "ngân hàng"]):
+            if any(w in t_lower for w in ["fdi", "doanh nghiệp", "thị trường", "tập đoàn", "đầu tư"]):
                 return (
                     "stock",
-                    "Thước phim tư liệu hiện đại về cảng biển, chuỗi cung ứng container và nhà máy",
-                    ["modern container port shipping", "stock trading floor modern economy"]
+                    "Trung tâm tài chính hiện đại với các tòa nhà văn phòng và giới doanh nhân",
+                    ["financial district skyscraper", "modern corporate business district"]
                 )
 
         # Opening scene priority
@@ -234,8 +259,12 @@ class RuleBasedScriptProvider(AIScriptProvider):
                 visual_method=visual_method,
                 visual_description=visual_desc,
                 suggested_asset_keywords=keywords,
+                search_keywords=keywords,
+                preferred_media_type="image",
+                preferred_aspect_ratio="16:9" if video_format == "long-form" else "9:16",
                 camera_direction=profile.camera_style,
                 transition=profile.transition_style,
+                transition_type=profile.transition_style,
                 sound_design=sound_cues,
                 source_references=[f"Nguồn tư liệu kiểm chứng cảnh {idx+1}"]
             ))

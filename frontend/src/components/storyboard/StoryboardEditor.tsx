@@ -104,12 +104,29 @@ export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
     }
   };
 
-  const handleAssignAsset = (asset: SceneAsset) => {
+  const handleAssignAsset = async (asset: SceneAsset) => {
     if (assetModalSceneIndex === null) return;
     const targetScene = manifest.scenes[assetModalSceneIndex];
+    let finalAsset = asset;
+
+    // Download asset to local secure storage if not yet downloaded
+    if (!asset.local_url && asset.source_url) {
+      try {
+        finalAsset = await apiClient.downloadAsset({
+          url: asset.source_url,
+          title: asset.attribution_text?.replace('Ảnh: ', '') || 'Tư liệu',
+          creator: asset.author_name,
+          license_type: asset.license_type,
+          attribution_text: asset.attribution_text
+        });
+      } catch (e) {
+        console.warn('Could not download asset to local storage, using direct URL:', e);
+      }
+    }
+
     handleUpdateScene(assetModalSceneIndex, {
-      assets: [asset],
-      visual_config: { ...targetScene.visual_config, imageUrl: asset.source_url }
+      assets: [finalAsset],
+      visual_config: { ...targetScene.visual_config, imageUrl: finalAsset.local_url || finalAsset.source_url }
     });
     setAssetModalSceneIndex(null);
   };

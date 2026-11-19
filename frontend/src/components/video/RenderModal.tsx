@@ -119,6 +119,26 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
     downloadFile(blob, `${manifest.title || 'video'}-subtitles.srt`);
   };
 
+  const handleDownloadCredits = () => {
+    let content = `=== BẢN QUYỀN VÀ NGUỒN TƯ LIỆU (${manifest.title || 'Video'}) ===\n`;
+    content += `Video này sử dụng các tư liệu hình ảnh và âm thanh tuân thủ giấy phép Creative Commons và Miền công cộng:\n\n`;
+
+    manifest.scenes.forEach((scene, sIdx) => {
+      const asset = scene.assets?.[0];
+      if (asset) {
+        content += `Cảnh ${sIdx + 1}: ${asset.attribution_text || asset.source_url}\n`;
+        if (asset.license_type) content += `  Giấy phép: ${asset.license_type}\n`;
+        if (asset.source_url) content += `  Nguồn: ${asset.source_url}\n\n`;
+      }
+    });
+
+    content += `Giọng đọc: Microsoft Edge Neural TTS (${manifest.voice_config?.voice || 'vi-VN-NamMinhNeural'})\n`;
+    content += `Sản xuất tự động bởi YTBER Studio.\n`;
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    downloadFile(blob, `${manifest.title || 'video'}-credits.txt`);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
       <div className="bg-studio-surface border border-studio-border rounded-2xl max-w-xl w-full p-6 shadow-2xl relative flex flex-col gap-5">
@@ -253,21 +273,29 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
             </div>
 
             {/* Action buttons */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => downloadFile(result.blob, `${manifest.title || 'video'}.mp4`)}
-                className="py-3 px-4 bg-studio-primary hover:bg-indigo-600 text-white font-bold rounded-xl shadow flex items-center justify-center gap-2 transition"
+                className="py-2.5 px-3 bg-studio-primary hover:bg-indigo-600 text-white text-xs font-bold rounded-xl shadow flex items-center justify-center gap-1.5 transition"
               >
-                <Download className="w-4 h-4" />
-                Tải Video MP4
+                <Download className="w-3.5 h-3.5" />
+                Tải MP4
               </button>
 
               <button
                 onClick={handleDownloadSRT}
-                className="py-3 px-4 bg-studio-card hover:bg-studio-border text-gray-200 border border-studio-border font-semibold rounded-xl flex items-center justify-center gap-2 transition"
+                className="py-2.5 px-3 bg-studio-card hover:bg-studio-border text-gray-200 border border-studio-border text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition"
               >
-                <FileText className="w-4 h-4" />
-                Tải Phụ Đề (.SRT)
+                <FileText className="w-3.5 h-3.5" />
+                Phụ Đề (.SRT)
+              </button>
+
+              <button
+                onClick={handleDownloadCredits}
+                className="py-2.5 px-3 bg-studio-card hover:bg-studio-border text-gray-200 border border-studio-border text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-studio-accent" />
+                Nguồn (.TXT)
               </button>
             </div>
 

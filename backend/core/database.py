@@ -15,9 +15,11 @@ if "sqlite" in settings.DATABASE_URL:
         if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir, exist_ok=True)
 
-# Ensure audio storage directory exists
+# Ensure audio and asset storage directories exist
 if settings.AUDIO_STORAGE_PATH and not os.path.exists(settings.AUDIO_STORAGE_PATH):
     os.makedirs(settings.AUDIO_STORAGE_PATH, exist_ok=True)
+if getattr(settings, "ASSET_STORAGE_PATH", None) and not os.path.exists(settings.ASSET_STORAGE_PATH):
+    os.makedirs(settings.ASSET_STORAGE_PATH, exist_ok=True)
 
 engine = create_async_engine(
     settings.DATABASE_URL,

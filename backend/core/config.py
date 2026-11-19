@@ -36,7 +36,11 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
 
-    # Asset Discovery
+    # Asset Discovery & Storage
     PEXELS_API_KEY: str = ""
+    ASSET_STORAGE_PATH: str = "./data/assets"
+    MAX_ASSET_SIZE_BYTES: int = 20 * 1024 * 1024  # 20MB
+    ASSET_DOWNLOAD_TIMEOUT_SECONDS: float = 15.0
+    ASSET_CACHE_ENABLED: bool = True
 
 settings = Settings()

@@ -124,13 +124,64 @@ export const apiClient = {
     return rawAssets.map((a) => ({
       id: a.asset_id,
       asset_type: a.media_type === 'video' ? 'video' : 'image',
-      source_url: a.full_url || a.preview_url,
+      source_url: a.download_url || a.full_url || a.preview_url,
       preview_url: a.preview_url,
-      full_url: a.full_url,
-      license_type: a.license_type || 'Public Domain',
-      author_name: a.author_name || 'Tác giả tư liệu',
+      full_url: a.download_url || a.full_url,
+      license_type: a.license || a.license_type || 'Public Domain',
+      author_name: a.creator || a.author_name || 'Tác giả tư liệu',
       attribution_text: a.attribution_text || `Ảnh: ${a.title}`,
     }));
+  },
+
+  async downloadAsset(asset: {
+    url: string;
+    title?: string;
+    provider?: string;
+    license_type?: string;
+    license_url?: string;
+    creator?: string;
+    attribution_required?: boolean;
+    attribution_text?: string;
+  }): Promise<SceneAsset> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/assets/download`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(asset),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Tải tư liệu thất bại (${res.status})`);
+    }
+
+    const data = await res.json();
+    return {
+      id: data.asset_id,
+      asset_type: data.media_type === 'video' ? 'video' : 'image',
+      source_url: asset.url,
+      local_url: data.local_url,
+      preview_url: data.local_url,
+      full_url: data.local_url,
+      license_type: data.license_type,
+      author_name: data.creator,
+      attribution_text: data.attribution_text,
+    };
+  },
+
+  async generateAttributionManifest(filenames: string[]): Promise<any> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/assets/attribution-manifest`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(filenames),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Tạo manifest bản quyền thất bại (${res.status})`);
+    }
+
+    return await res.json();
   },
 
   // 4. Voice Studio & Real Speech Synthesis

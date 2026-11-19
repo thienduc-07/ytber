@@ -8,10 +8,15 @@ def _b64url_decode(data: str) -> bytes:
     padding = '=' * (4 - (len(data) % 4))
     return base64.urlsafe_b64decode(data + padding)
 
-def decode_and_verify_supabase_jwt(token: str, secret: Optional[str] = None) -> Dict[str, Any]:
+def decode_and_verify_supabase_jwt(
+    token: str,
+    secret: Optional[str] = None,
+    audience: Optional[str] = None,
+    issuer: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Decodes and verifies a standard Supabase JWT token with strict FAIL-CLOSED security.
-    Validates token structure, algorithm, signature, and expiration.
+    Validates token structure, algorithm, signature, expiration, audience, and issuer.
     Never bypasses verification for missing or placeholder secrets.
     """
     jwt_secret = secret or settings.SUPABASE_JWT_SECRET
@@ -33,17 +38,68 @@ def decode_and_verify_supabase_jwt(token: str, secret: Optional[str] = None) -> 
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Strictly verify signature and expiration
+        # Determine expected audience and issuer
+        expected_aud = audience if audience is not None else settings.SUPABASE_JWT_AUDIENCE
+
+        expected_iss = issuer
+        if expected_iss is None:
+            if settings.SUPABASE_JWT_ISSUER:
+                expected_iss = settings.SUPABASE_JWT_ISSUER
+            elif settings.SUPABASE_URL and not settings.SUPABASE_URL.startswith("https://placeholder-"):
+                expected_iss = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1"
+
+        # Configure decode options
+        decode_options = {
+            "verify_signature": True,
+            "verify_exp": True,
+            "verify_aud": False,  # Custom validated below for audience/role compatibility
+            "verify_iss": bool(expected_iss),
+            "require": ["exp", "sub"]
+        }
+        if expected_iss:
+            decode_options["require"].append("iss")
+
+        # Strictly verify signature, expiration, and issuer
         payload = jwt.decode(
             token,
             key=jwt_secret,
             algorithms=[alg],
-            options={
-                "verify_signature": True,
-                "verify_exp": True,
-                "require": ["exp", "sub"]
-            }
+            issuer=expected_iss if expected_iss else None,
+            options=decode_options
         )
+
+        # Strictly verify audience (checking 'aud' claim, with fallback to 'role')
+        if expected_aud:
+            token_aud = payload.get("aud")
+            token_role = payload.get("role")
+            if token_aud is not None:
+                if isinstance(token_aud, list):
+                    if expected_aud not in token_aud:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Authentication failed: JWT audience verification failed",
+                            headers={"WWW-Authenticate": "Bearer"},
+                        )
+                elif token_aud != expected_aud:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Authentication failed: JWT audience verification failed",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+            elif token_role is not None:
+                if token_role != expected_aud:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Authentication failed: JWT audience verification failed",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Authentication failed: Missing required JWT claim: Token is missing the 'aud' claim",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(
@@ -51,10 +107,28 @@ def decode_and_verify_supabase_jwt(token: str, secret: Optional[str] = None) -> 
             detail="Authentication failed: JWT token has expired",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    except jwt.InvalidAudienceError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed: JWT audience verification failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.InvalidIssuerError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed: JWT issuer verification failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     except jwt.InvalidSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication failed: JWT signature verification failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.MissingRequiredClaimError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Authentication failed: Missing required JWT claim: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
     except jwt.DecodeError as e:

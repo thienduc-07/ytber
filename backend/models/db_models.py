@@ -124,3 +124,21 @@ class RenderJobModel(Base):
             "created_at": self.created_at,
             "completed_at": self.completed_at,
         }
+
+class AudioFileModel(Base):
+    __tablename__ = "audio_files"
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(64), nullable=False, index=True)
+    filename = Column(String(255), nullable=False, unique=True, index=True)
+    duration_seconds = Column(Float, default=0.0)
+    created_at = Column(String(32), default=lambda: datetime.utcnow().isoformat() + "Z")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "filename": self.filename,
+            "duration_seconds": self.duration_seconds,
+            "created_at": self.created_at,
+        }

@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 from typing import AsyncGenerator
+from sqlalchemy import event, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from backend.core.config import settings
 from backend.models.db_models import Base
@@ -24,6 +26,14 @@ engine = create_async_engine(
     connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
 )
 
+# Enforce SQLite foreign key constraints for all connection pool checkouts
+@event.listens_for(engine.sync_engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    if "sqlite" in settings.DATABASE_URL:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
@@ -35,11 +45,18 @@ AsyncSessionLocal = async_sessionmaker(
 def init_db_sync() -> None:
     """Synchronously ensure database tables exist (works for SQLite and startup)."""
     from sqlalchemy import create_engine
-    sync_url = settings.DATABASE_URL.replace("+aiosqlite", "")
+    sync_url = settings.DATABASE_URL.replace("+aiosqlite", "").replace("+asyncpg", "")
     sync_engine = create_engine(
         sync_url,
         connect_args={"check_same_thread": False} if "sqlite" in sync_url else {}
     )
+    if "sqlite" in sync_url:
+        @event.listens_for(sync_engine, "connect")
+        def set_sync_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
     Base.metadata.create_all(sync_engine)
     sync_engine.dispose()
 

@@ -166,9 +166,14 @@ class EdgeTTSVoiceProvider(VoiceProvider):
 
     def __init__(self, storage_dir: Optional[str] = None):
         self.normalizer = VietnameseTextNormalizer()
-        self.storage_dir = storage_dir or settings.AUDIO_STORAGE_PATH
-        if not os.path.exists(self.storage_dir):
-            os.makedirs(self.storage_dir, exist_ok=True)
+        self._storage_dir = storage_dir
+
+    @property
+    def storage_dir(self) -> str:
+        d = self._storage_dir or settings.AUDIO_STORAGE_PATH
+        if not os.path.exists(d):
+            os.makedirs(d, exist_ok=True)
+        return d
 
     def get_supported_voices(self) -> List[Dict[str, Any]]:
         return self.SUPPORTED_VOICES

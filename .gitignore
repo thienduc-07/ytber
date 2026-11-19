@@ -1,0 +1,35 @@
+# Node dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+out/
+.cache/
+
+# Python virtualenv & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Remotion temporary bundles
+remotion-webpack-bundle-*
+puppeteer_dev_chrome_profile-*
+.remotion/
+
+# OS metadata
+.DS_Store
+Thumbs.db

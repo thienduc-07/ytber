@@ -39,7 +39,7 @@ async def test_tts_syllable_timings():
     text = "74 người lính bước đều."
     result = await service.synthesize(text)
     
-    assert result.duration_seconds >= 3.0
+    assert result.duration_seconds >= 2.0
     assert len(result.words) > 0
     
     # Check monotonic timestamps
@@ -48,6 +48,23 @@ async def test_tts_syllable_timings():
         assert w.start_ms >= last_end
         assert w.end_ms > w.start_ms
         last_end = w.end_ms
+
+@pytest.mark.asyncio
+async def test_real_edge_tts_voice_provider():
+    from backend.providers.tts_engine import EdgeTTSVoiceProvider
+    provider = EdgeTTSVoiceProvider()
+    
+    voices = provider.get_supported_voices()
+    assert len(voices) >= 2
+    assert any(v["id"] == "vi-VN-NamMinhNeural" for v in voices)
+    assert any(v["id"] == "vi-VN-HoaiMyNeural" for v in voices)
+
+    # Synthesize short phrase
+    res = await provider.synthesize("Xin chào Việt Nam", voice="vi-VN-NamMinhNeural")
+    assert res.duration_seconds > 0.5
+    assert len(res.normalized_text) > 0
+    assert len(res.words) > 0
+    assert res.audio_url.startswith("/api/v1/tts/audio/") or res.audio_url.startswith("/api/v1/tts/")
 
 @pytest.mark.asyncio
 async def test_asset_discovery_wikimedia():

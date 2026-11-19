@@ -166,7 +166,7 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
             <div className="bg-studio-card p-4 rounded-xl border border-studio-border text-sm space-y-2">
               <div className="flex justify-between text-gray-300">
                 <span>Độ phân giải:</span>
-                <span className="font-mono text-white">1080 × 1920 (9:16 Vertical)</span>
+                <span className="font-mono text-white">{manifest.video_specs.width} × {manifest.video_specs.height} ({manifest.aspect_ratio || '9:16'})</span>
               </div>
               <div className="flex justify-between text-gray-300">
                 <span>Tốc độ khung hình:</span>

@@ -1,10 +1,7 @@
-import hmac
-import hashlib
 import base64
-import json
-import time
 from typing import Optional, Dict, Any
 from fastapi import Header, HTTPException, status, Depends
+import jwt
 from backend.core.config import settings
 
 def _b64url_decode(data: str) -> bytes:
@@ -13,39 +10,61 @@ def _b64url_decode(data: str) -> bytes:
 
 def decode_and_verify_supabase_jwt(token: str, secret: Optional[str] = None) -> Dict[str, Any]:
     """
-    Decodes and verifies a standard Supabase HS256 JWT token.
-    Uses Python standard library (hmac, hashlib, base64, json) for 100% zero-dependency execution.
+    Decodes and verifies a standard Supabase JWT token with strict FAIL-CLOSED security.
+    Validates token structure, algorithm, signature, and expiration.
+    Never bypasses verification for missing or placeholder secrets.
     """
+    jwt_secret = secret or settings.SUPABASE_JWT_SECRET
+    if not jwt_secret or jwt_secret.startswith("placeholder-"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed: Server JWT secret is not configured or placeholder. Signature verification cannot be performed.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     try:
-        parts = token.split(".")
-        if len(parts) != 3:
-            raise ValueError("Invalid JWT token format (expected 3 parts)")
-        
-        header_b64, payload_b64, signature_b64 = parts
-        
-        # Verify signature if secret is provided and not default placeholder
-        jwt_secret = secret or settings.SUPABASE_JWT_SECRET
-        if jwt_secret and not jwt_secret.startswith("placeholder-"):
-            signing_input = f"{header_b64}.{payload_b64}".encode("utf-8")
-            expected_sig = hmac.new(
-                jwt_secret.encode("utf-8"),
-                signing_input,
-                hashlib.sha256
-            ).digest()
-            actual_sig = _b64url_decode(signature_b64)
-            if not hmac.compare_digest(expected_sig, actual_sig):
-                raise ValueError("JWT signature verification failed")
-        
-        # Decode payload
-        payload_bytes = _b64url_decode(payload_b64)
-        payload = json.loads(payload_bytes.decode("utf-8"))
-        
-        # Check expiration
-        exp = payload.get("exp")
-        if exp and exp < time.time():
-            raise ValueError("JWT token has expired")
-            
+        # First verify unverified header to ensure allowed algorithms only
+        unverified_header = jwt.get_unverified_header(token)
+        alg = unverified_header.get("alg")
+        if alg not in ("HS256", "RS256"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Authentication failed: Unsupported signing algorithm '{alg}'. Only HS256 and RS256 are permitted.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Strictly verify signature and expiration
+        payload = jwt.decode(
+            token,
+            key=jwt_secret,
+            algorithms=[alg],
+            options={
+                "verify_signature": True,
+                "verify_exp": True,
+                "require": ["exp", "sub"]
+            }
+        )
         return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed: JWT token has expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.InvalidSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed: JWT signature verification failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.DecodeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Authentication failed: Malformed or unparseable JWT token: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -56,6 +75,7 @@ def decode_and_verify_supabase_jwt(token: str, secret: Optional[str] = None) -> 
 async def get_current_user_id(authorization: Optional[str] = Header(None)) -> str:
     """
     FastAPI dependency to authenticate requests and extract user_id (sub).
+    Strictly enforces Bearer format and fail-closed validation.
     """
     if not authorization:
         raise HTTPException(

@@ -1,16 +1,25 @@
 from typing import List
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
     ENVIRONMENT: str = "production"
     PORT: int = 8000
     CORS_ORIGINS: List[str] = [
         "https://studio.yourdomain.com",
         "http://localhost:5173",
-        "http://127.0.0.1:5173"
+        "http://127.0.0.1:5173",
+        "http://localhost:3000"
     ]
     
-    # Supabase Credentials
+    # Database (Persistent SQLite for zero-config local/self-hosted or PostgreSQL for Cloud)
+    DATABASE_URL: str = "sqlite+aiosqlite:///./data/ytber.db"
+    
+    # Audio Storage Directory for synthesized TTS voices
+    AUDIO_STORAGE_PATH: str = "./data/audio"
+
+    # Supabase Credentials (for cloud multi-tenancy)
     SUPABASE_URL: str = "https://placeholder-project.supabase.co"
     SUPABASE_ANON_KEY: str = "placeholder-anon-key"
     SUPABASE_SERVICE_ROLE_KEY: str = "placeholder-service-key"
@@ -22,9 +31,5 @@ class Settings(BaseSettings):
 
     # Asset Discovery
     PEXELS_API_KEY: str = ""
-
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
 
 settings = Settings()

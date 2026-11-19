@@ -25,6 +25,13 @@ env/
 .env.test.local
 .env.production.local
 
+# Runtime data and SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+data/audio/*.mp3
+!data/audio/.gitkeep
+
 # Remotion temporary bundles
 remotion-webpack-bundle-*
 puppeteer_dev_chrome_profile-*

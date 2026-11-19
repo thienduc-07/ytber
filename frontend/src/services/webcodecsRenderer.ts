@@ -432,18 +432,20 @@ export class WebCodecsRenderer {
     ctx.restore();
 
     // Scene Label Badge
+    const badgeX = Math.round(w * 0.06);
+    const badgeY = Math.round(h * 0.06);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-    ctx.fillRect(80, 120, 380, 70);
+    ctx.fillRect(badgeX, badgeY, 380, 70);
     ctx.fillStyle = '#00FF66';
-    ctx.font = 'bold 28px monospace';
+    ctx.font = 'bold 26px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`CẢNH ${scene.scene_order}: ${scene.visual_method.toUpperCase()}`, 105, 165);
+    ctx.fillText(`CẢNH ${scene.scene_order}: ${scene.visual_method.toUpperCase()}`, badgeX + 25, badgeY + 45);
   }
 
   private renderSubtitles(
     ctx: CanvasRenderingContext2D,
     w: number,
-    _h: number,
+    h: number,
     scene: SceneItem,
     t: number
   ) {
@@ -451,32 +453,39 @@ export class WebCodecsRenderer {
     const words = text.split(' ');
     const activeWordIdx = Math.min(words.length - 1, Math.floor(t * words.length));
 
-    const y = 1420; // 74% vertical safe zone
+    // Dynamic vertical positioning based on aspect ratio
+    const y = Math.round(h * 0.78);
+    const subH = Math.min(180, Math.round(h * 0.16));
+    const cardW = Math.round(w * 0.86);
+    const cardX = Math.round((w - cardW) / 2);
+
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
     // Bounding subtitle card backdrop
     ctx.fillStyle = 'rgba(10, 8, 16, 0.85)';
-    ctx.roundRect(80, y - 90, w - 160, 180, 24);
+    ctx.roundRect(cardX, y - subH / 2, cardW, subH, 24);
     ctx.fill();
     ctx.strokeStyle = '#2A2238';
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Group text into 3-word chunks for vertical viewing
-    const chunkStart = Math.floor(activeWordIdx / 4) * 4;
-    const currentChunk = words.slice(chunkStart, chunkStart + 4);
+    // Group text into chunks for readability
+    const wordsPerChunk = w > h ? 6 : 4;
+    const chunkStart = Math.floor(activeWordIdx / wordsPerChunk) * wordsPerChunk;
+    const currentChunk = words.slice(chunkStart, chunkStart + wordsPerChunk);
 
     const fullStr = currentChunk.join(' ');
-    ctx.font = 'bold 56px "Be Vietnam Pro", sans-serif';
+    const fontSize = Math.round(Math.min(w, h) * 0.048);
+    ctx.font = `bold ${fontSize}px "Be Vietnam Pro", sans-serif`;
 
     // Dark stroke outline
     ctx.strokeStyle = '#050308';
-    ctx.lineWidth = 10;
+    ctx.lineWidth = 8;
     ctx.lineJoin = 'round';
     ctx.strokeText(fullStr, w / 2, y);
 
-    // Active word highlight: bright yellow with scale bounce
+    // Active word highlight: bright yellow
     ctx.fillStyle = '#FFDF00';
     ctx.fillText(fullStr, w / 2, y);
   }

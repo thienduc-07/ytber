@@ -26,8 +26,10 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const w = 1080;
-    const h = 1920;
+    const w = manifest.video_specs?.width || 1080;
+    const h = manifest.video_specs?.height || 1920;
+    canvas.width = w;
+    canvas.height = h;
 
     // Find active scene
     let accumulatedTime = 0;
@@ -43,30 +45,43 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
 
     // Render Preview Frame
     const grad = ctx.createLinearGradient(0, 0, w, h);
-    grad.addColorStop(0, '#1c1c2b');
-    grad.addColorStop(1, '#0d0d12');
+    if (manifest.genre === 'horror') {
+      grad.addColorStop(0, '#0a0a0f');
+      grad.addColorStop(1, '#020204');
+    } else if (manifest.genre === 'economics') {
+      grad.addColorStop(0, '#0f172a');
+      grad.addColorStop(1, '#020617');
+    } else {
+      grad.addColorStop(0, '#1c1c2b');
+      grad.addColorStop(1, '#0d0d12');
+    }
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
 
     // Visual modality indicator
-    ctx.fillStyle = '#FFB36B';
-    ctx.font = 'bold 48px sans-serif';
+    ctx.fillStyle = manifest.genre === 'horror' ? '#EF4444' : '#FFB36B';
+    ctx.font = 'bold 44px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`CẢNH: ${activeScene?.scene_type?.toUpperCase() || 'NARRATIVE'}`, w / 2, 400);
+    ctx.fillText(`CẢNH: ${activeScene?.scene_type?.toUpperCase() || 'NARRATIVE'}`, w / 2, h * 0.22);
 
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = '36px sans-serif';
-    ctx.fillText(`Phương thức: ${activeScene?.visual_method?.toUpperCase() || 'PHOTO'}`, w / 2, 480);
+    ctx.font = '32px sans-serif';
+    ctx.fillText(`Phương thức: ${activeScene?.visual_method?.toUpperCase() || 'PHOTO'}`, w / 2, h * 0.27);
 
     // Subtitle card preview
     if (activeScene) {
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
-      ctx.roundRect(80, 1350, w - 160, 160, 24);
+      const subY = h * 0.75;
+      const subH = Math.min(160, h * 0.15);
+      ctx.roundRect(w * 0.08, subY, w * 0.84, subH, 24);
       ctx.fill();
 
       ctx.fillStyle = '#FFDF00';
-      ctx.font = 'bold 52px "Be Vietnam Pro", sans-serif';
-      ctx.fillText(activeScene.narration_text.slice(0, 45) + '...', w / 2, 1440);
+      ctx.font = 'bold 40px "Be Vietnam Pro", sans-serif';
+      const displayText = activeScene.narration_text.length > 50 
+        ? activeScene.narration_text.slice(0, 50) + '...'
+        : activeScene.narration_text;
+      ctx.fillText(displayText, w / 2, subY + subH * 0.6);
     }
   }, [localTime, manifest]);
 

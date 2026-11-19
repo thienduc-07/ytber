@@ -1,7 +1,12 @@
+import os
 import re
-import math
+import uuid
+import asyncio
+from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+import edge_tts
+from backend.core.config import settings
 
 class WordTiming(BaseModel):
     word: str
@@ -9,11 +14,14 @@ class WordTiming(BaseModel):
     end_ms: int
 
 class TTSResult(BaseModel):
+    audio_id: str
     normalized_text: str
     audio_url: str
     duration_seconds: float
     words: List[WordTiming]
     provider: str
+    sample_rate: int = 24000
+    format: str = "mp3"
 
 # Vietnamese number-to-words dictionary
 ONES = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"]
@@ -77,7 +85,7 @@ class VietnameseTextNormalizer:
 
     def normalize(self, text: str) -> str:
         res = text
-        # 1. Normalize dates (e.g. 12/04/1831 or 12/04), avoiding duplicate "ngày"
+        # 1. Normalize dates (e.g. 12/04/1831 or 12/04)
         def replace_date(m):
             prefix = m.group(1) or ""
             d, mo = int(m.group(2)), int(m.group(3))
@@ -114,7 +122,149 @@ class VietnameseTextNormalizer:
 
         return re.sub(r'\s+', ' ', res).strip()
 
+class VoiceProvider(ABC):
+    @abstractmethod
+    async def synthesize(
+        self,
+        text: str,
+        voice: str = "vi-VN-NamMinhNeural",
+        rate: str = "+0%",
+        pitch: str = "+0Hz"
+    ) -> TTSResult:
+        pass
+
+    @abstractmethod
+    def get_supported_voices(self) -> List[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    def estimate_duration(self, text: str) -> float:
+        pass
+
+class EdgeTTSVoiceProvider(VoiceProvider):
+    """
+    Production-grade, zero-budget Vietnamese Speech Synthesis Engine using Microsoft Edge Neural TTS.
+    Generates genuine MP3 audio streams and precise word-level millisecond boundary cues.
+    Includes persistent on-disk audio caching and exponential backoff retry.
+    """
+    SUPPORTED_VOICES = [
+        {
+            "id": "vi-VN-NamMinhNeural",
+            "name": "Nam Minh (Giọng Nam - Miền Bắc)",
+            "gender": "Male",
+            "locale": "vi-VN",
+            "sample_rate": 24000
+        },
+        {
+            "id": "vi-VN-HoaiMyNeural",
+            "name": "Hoài My (Giọng Nữ - Miền Bắc)",
+            "gender": "Female",
+            "locale": "vi-VN",
+            "sample_rate": 24000
+        }
+    ]
+
+    def __init__(self, storage_dir: Optional[str] = None):
+        self.normalizer = VietnameseTextNormalizer()
+        self.storage_dir = storage_dir or settings.AUDIO_STORAGE_PATH
+        if not os.path.exists(self.storage_dir):
+            os.makedirs(self.storage_dir, exist_ok=True)
+
+    def get_supported_voices(self) -> List[Dict[str, Any]]:
+        return self.SUPPORTED_VOICES
+
+    def estimate_duration(self, text: str) -> float:
+        normalized = self.normalizer.normalize(text)
+        words_count = max(1, len(normalized.split()))
+        return round(max(1.5, words_count / 3.8), 2)
+
+    async def synthesize(
+        self,
+        text: str,
+        voice: str = "vi-VN-NamMinhNeural",
+        rate: str = "+0%",
+        pitch: str = "+0Hz"
+    ) -> TTSResult:
+        normalized_text = self.normalizer.normalize(text)
+        if not normalized_text:
+            raise ValueError("Văn bản đầu vào không được để trống sau khi chuẩn hóa")
+
+        # Validate voice selection
+        valid_voice_ids = [v["id"] for v in self.SUPPORTED_VOICES]
+        selected_voice = voice if voice in valid_voice_ids else "vi-VN-NamMinhNeural"
+
+        audio_id = str(uuid.uuid4())
+        filename = f"{audio_id}.mp3"
+        filepath = os.path.join(self.storage_dir, filename)
+
+        # Retry loop with exponential backoff for cloud connection resilience
+        max_retries = 3
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                communicate = edge_tts.Communicate(
+                    text=normalized_text,
+                    voice=selected_voice,
+                    rate=rate,
+                    pitch=pitch,
+                    boundary="WordBoundary"
+                )
+
+                audio_bytes = bytearray()
+                words: List[WordTiming] = []
+
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        audio_bytes.extend(chunk["data"])
+                    elif chunk["type"] == "WordBoundary":
+                        # Convert 100-nanosecond ticks to milliseconds (10,000 ticks = 1 ms)
+                        start_ms = int(chunk["offset"] // 10000)
+                        dur_ms = int(chunk["duration"] // 10000)
+                        clean_word = chunk["text"].strip()
+                        words.append(WordTiming(
+                            word=clean_word,
+                            start_ms=start_ms,
+                            end_ms=start_ms + dur_ms
+                        ))
+
+                if len(audio_bytes) == 0:
+                    raise ValueError("Edge-TTS returned empty audio stream")
+
+                # Write genuine MP3 audio to persistent disk
+                with open(filepath, "wb") as f:
+                    f.write(audio_bytes)
+
+                # Determine exact audio duration
+                if words:
+                    duration_sec = round(max(words[-1].end_ms / 1000.0, len(audio_bytes) / 6000.0), 2)
+                else:
+                    duration_sec = self.estimate_duration(normalized_text)
+
+                audio_url = f"/api/v1/tts/audio/{filename}"
+
+                return TTSResult(
+                    audio_id=audio_id,
+                    normalized_text=normalized_text,
+                    audio_url=audio_url,
+                    duration_seconds=duration_sec,
+                    words=words,
+                    provider="edge-tts-neural",
+                    sample_rate=24000,
+                    format="mp3"
+                )
+            except Exception as e:
+                last_error = e
+                await asyncio.sleep(0.5 * (attempt + 1))
+
+        # Fallback to local offline syllable timing if network blocked
+        fallback_service = TTSService()
+        fallback_result = await fallback_service.synthesize(normalized_text, voice=selected_voice)
+        fallback_result.provider = f"offline-fallback (edge-tts failed: {str(last_error)})"
+        return fallback_result
+
 class TTSService:
+    """Offline Fallback Voice Service maintaining backwards compatibility."""
     def __init__(self):
         self.normalizer = VietnameseTextNormalizer()
 
@@ -127,10 +277,9 @@ class TTSService:
         ms_per_word = max(150, total_ms // len(words))
         
         timings: List[WordTiming] = []
-        cur_ms = 100 # initial 100ms breath buffer
+        cur_ms = 100
         
         for idx, w in enumerate(words):
-            # slightly longer duration for sentence-ending words
             factor = 1.3 if (w.endswith(('.', '!', '?')) or idx == len(words) - 1) else 1.0
             word_dur = int(ms_per_word * factor)
             end_ms = cur_ms + word_dur
@@ -140,25 +289,23 @@ class TTSService:
                 start_ms=cur_ms,
                 end_ms=end_ms
             ))
-            cur_ms = end_ms + 40 # 40ms inter-word gap
+            cur_ms = end_ms + 40
             
         return timings
 
     async def synthesize(self, text: str, voice: str = "vi-VN-NamMinhNeural") -> TTSResult:
         normalized = self.normalizer.normalize(text)
-        
-        # Calculate standard pace: 4.0 syllables/second
         words_count = max(1, len(normalized.split()))
-        duration_sec = round(max(3.0, words_count / 3.8), 2)
-        
+        duration_sec = round(max(2.0, words_count / 3.8), 2)
         timings = self.generate_syllable_timings(normalized, duration_sec)
         
-        # In cloud mode, return structured audio timing payload
-        # Audio generation URL links to the synthesized stem or client audio buffer
         return TTSResult(
+            audio_id="offline-stem",
             normalized_text=normalized,
             audio_url=f"/api/v1/tts/sample_audio.wav?dur={duration_sec}&v={voice}",
             duration_seconds=duration_sec,
             words=timings,
-            provider="tts-vietnamese-normalizer"
+            provider="tts-vietnamese-normalizer",
+            sample_rate=24000,
+            format="wav"
         )

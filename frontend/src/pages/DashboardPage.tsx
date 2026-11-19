@@ -2,30 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { Header } from '../components/layout/Header';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import type { Project } from '../types/database';
-import { supabase } from '../services/supabase';
+import type { Project, GenreInfo } from '../types/database';
+import { apiClient } from '../services/apiClient';
 import { 
-  PlusCircle, Sparkles, Clock, FolderOpen, Trash2, ArrowRight, Zap, ShieldCheck
+  PlusCircle, Sparkles, Clock, FolderOpen, Trash2, ArrowRight, Zap, Film
 } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [newVideoType, setNewVideoType] = useState<'short-form' | 'long-form'>('short-form');
+  const [newGenre, setNewGenre] = useState('general');
   const [showNewModal, setShowNewModal] = useState(false);
+  const [genres, setGenres] = useState<GenreInfo[]>([]);
 
   useEffect(() => {
     loadProjects();
+    apiClient.fetchGenres().then(setGenres).catch(console.warn);
   }, [user]);
 
   const loadProjects = async () => {
     setLoading(true);
-    if (!user) {
-      // Local demo mode for unauthenticated users
+    try {
+      const projs = await apiClient.listProjects();
+      setProjects(projs);
+    } catch (e) {
+      console.warn('API listProjects failed, using local storage fallback:', e);
       const local = localStorage.getItem('demo_projects');
       if (local) {
         setProjects(JSON.parse(local));
@@ -37,6 +44,8 @@ export const DashboardPage: React.FC = () => {
             title: 'Chiến Thắng Điện Biên Phủ 1954',
             description: 'Kịch bản lịch sử hào hùng 60s cho Shorts/TikTok',
             status: 'ready',
+            video_type: 'short-form',
+            genre: 'historical_doc',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }
@@ -44,67 +53,47 @@ export const DashboardPage: React.FC = () => {
         setProjects(demo);
         localStorage.setItem('demo_projects', JSON.stringify(demo));
       }
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .order('updated_at', { ascending: false });
-
-      if (!error && data) {
-        setProjects(data as Project[]);
-      }
-    } catch (e) {
-      console.error('Error fetching projects:', e);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateProject = async (titleToCreate?: string) => {
-    const title = titleToCreate || newTitle || 'Video Ngắn Không Tiêu Đề';
+  const handleCreateProject = async (titleToCreate?: string, type?: 'short-form' | 'long-form', g?: string) => {
+    const title = titleToCreate || newTitle || 'Dự Án Video AI';
+    const vType = type || newVideoType;
+    const vGenre = g || newGenre;
     setIsCreating(true);
 
     try {
-      if (!user) {
-        const newProj: Project = {
-          id: `demo-${Date.now()}`,
-          user_id: 'anonymous',
-          title: title,
-          description: 'Dự án tạo trong phiên thử nghiệm',
-          status: 'draft',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        const updated = [newProj, ...projects];
-        setProjects(updated);
-        localStorage.setItem('demo_projects', JSON.stringify(updated));
-        setShowNewModal(false);
-        setNewTitle('');
-        navigate(`/studio/${newProj.id}`);
-        return;
-      }
+      const created = await apiClient.createProject({
+        title: title,
+        description: `Dự án ${vType === 'long-form' ? 'video ngang dài' : 'video ngắn dọc'} thể loại ${vGenre}`,
+        video_type: vType,
+        genre: vGenre,
+      });
 
-      const { data, error } = await supabase
-        .from('projects')
-        .insert({
-          user_id: user.id,
-          title: title,
-          status: 'draft',
-        })
-        .select()
-        .single();
-
-      if (!error && data) {
-        setShowNewModal(false);
-        setNewTitle('');
-        navigate(`/studio/${data.id}`);
-      }
+      setShowNewModal(false);
+      setNewTitle('');
+      navigate(`/studio/${created.id}`);
     } catch (e) {
-      console.error('Error creating project:', e);
+      console.warn('API createProject failed, using local storage fallback:', e);
+      const newProj: Project = {
+        id: `demo-${Date.now()}`,
+        user_id: 'anonymous',
+        title: title,
+        description: 'Dự án tạo trong phiên thử nghiệm',
+        status: 'draft',
+        video_type: vType,
+        genre: vGenre,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      const updated = [newProj, ...projects];
+      setProjects(updated);
+      localStorage.setItem('demo_projects', JSON.stringify(updated));
+      setShowNewModal(false);
+      setNewTitle('');
+      navigate(`/studio/${newProj.id}`);
     } finally {
       setIsCreating(false);
     }
@@ -114,140 +103,137 @@ export const DashboardPage: React.FC = () => {
     e.stopPropagation();
     if (!confirm('Bạn có chắc chắn muốn xóa dự án này?')) return;
 
-    if (!user) {
-      const updated = projects.filter((p) => p.id !== id);
-      setProjects(updated);
-      localStorage.setItem('demo_projects', JSON.stringify(updated));
-      return;
+    try {
+      await apiClient.deleteProject(id);
+    } catch (err) {
+      console.warn('API delete failed, updating local state:', err);
     }
 
-    await supabase.from('projects').delete().eq('id', id);
-    setProjects(projects.filter((p) => p.id !== id));
+    const updated = projects.filter((p) => p.id !== id);
+    setProjects(updated);
+    localStorage.setItem('demo_projects', JSON.stringify(updated));
   };
 
   return (
     <div className="min-h-screen bg-studio-bg flex flex-col">
-      <Header onNewProject={() => setShowNewModal(true)} />
+      <Header />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 flex flex-col gap-8">
-        {/* Welcome & Quota Hero Banner */}
-        <section className="bg-gradient-to-r from-studio-surface via-studio-card to-studio-surface border border-studio-border rounded-3xl p-8 relative overflow-hidden shadow-2xl">
-          <div className="absolute right-0 top-0 w-96 h-96 bg-studio-primary/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-            <div className="max-w-2xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-studio-primary/20 border border-studio-primary/30 text-studio-primary text-xs font-bold mb-3">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>NỀN TẢNG AI SHORTS KHÔNG TỐN CHI PHÍ (ZERO-BUDGET)</span>
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-tight">
-                Sản Xuất Video Ngắn Tiếng Việt Tự Động 100% Trong Trình Duyệt
-              </h1>
-              <p className="text-gray-400 text-sm mt-3 leading-relaxed">
-                Tự động hóa toàn bộ quy trình: Nhập kịch bản tiếng Việt → Phân tích cảnh → Khám phá tư liệu mở CC0/Wikimedia → Tạo phụ đề động → Kết xuất H.264 1080×1920 30FPS bằng WebCodecs trực tiếp trên máy của bạn mà không tốn máy chủ.
-              </p>
+      <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8 flex flex-col gap-8">
+        {/* Hero Banner */}
+        <section className="bg-gradient-to-r from-studio-surface via-studio-card to-studio-surface border border-studio-border rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="space-y-3 max-w-xl z-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-studio-primary/20 border border-studio-primary/40 text-studio-primary text-xs font-semibold">
+              <Zap className="w-3.5 h-3.5" />
+              <span>Nền Tảng Sản Xuất Video AI Tích Hợp Đa Thể Loại</span>
             </div>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight leading-tight">
+              Sản Xuất Video Shorts & Long-Form Hoàn Toàn Tự Động
+            </h1>
+            <p className="text-sm text-gray-300 leading-relaxed">
+              Nhập kịch bản tiếng Việt bất kỳ. Hệ thống tự động phân tích thể loại (Genre Intelligence), nghiên cứu tư liệu bản quyền mở, tạo giọng đọc Neural Edge-TTS và kết xuất video MP4 trực tiếp.
+            </p>
+          </div>
 
-            {/* Quota overview */}
-            <div className="bg-studio-bg/80 border border-studio-border rounded-2xl p-4 w-full lg:w-72 flex flex-col gap-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-400">Gói tài khoản:</span>
-                <span className="font-bold text-studio-accent uppercase">{profile?.tier || 'Free $0.00'}</span>
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-300">Phân tích kịch bản hôm nay</span>
-                  <span className="font-mono text-white font-semibold">1 / 20</span>
-                </div>
-                <div className="w-full bg-studio-surface h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-studio-primary h-full w-[5%]" />
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Hạ tầng không tốn phí bản quyền</span>
-              </div>
-            </div>
+          <div className="flex flex-col sm:flex-row gap-3 z-10 w-full md:w-auto">
+            <button
+              onClick={() => {
+                setNewVideoType('short-form');
+                setShowNewModal(true);
+              }}
+              className="px-5 py-3 bg-gradient-to-r from-studio-primary to-indigo-600 hover:from-indigo-500 hover:to-indigo-700 text-white font-bold rounded-2xl shadow-lg flex items-center justify-center gap-2 transition hover:scale-105"
+            >
+              <PlusCircle className="w-5 h-5" />
+              <span>Tạo Video Shorts (9:16)</span>
+            </button>
+            <button
+              onClick={() => {
+                setNewVideoType('long-form');
+                setShowNewModal(true);
+              }}
+              className="px-5 py-3 bg-studio-card hover:bg-studio-border border border-studio-border text-gray-200 font-bold rounded-2xl shadow-lg flex items-center justify-center gap-2 transition hover:scale-105"
+            >
+              <Film className="w-5 h-5 text-studio-accent" />
+              <span>Tạo Long-Form (16:9)</span>
+            </button>
           </div>
         </section>
 
-        {/* Project Section */}
-        <section className="flex flex-col gap-4">
+        {/* Projects Grid Section */}
+        <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <FolderOpen className="w-5 h-5 text-studio-primary" />
-              <h2 className="text-xl font-bold text-white">Dự Án Của Bạn</h2>
-              <span className="text-xs bg-studio-card text-gray-400 px-2.5 py-0.5 rounded-full border border-studio-border">
-                {projects.length} dự án
-              </span>
-            </div>
-
-            <button
-              onClick={() => setShowNewModal(true)}
-              className="flex items-center gap-2 bg-studio-primary hover:bg-indigo-600 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition shadow"
-            >
-              <PlusCircle className="w-4 h-4" />
-              Tạo Dự Án Mới
-            </button>
+              Dự Án Đã Tạo ({projects.length})
+            </h2>
           </div>
 
-          {/* Projects Grid */}
           {loading ? (
-            <div className="py-12 flex justify-center text-sm text-gray-400">
-              Đang tải danh sách dự án...
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-studio-surface border border-studio-border rounded-2xl p-5 h-44 animate-pulse" />
+              ))}
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="bg-studio-surface border border-studio-border border-dashed rounded-2xl p-12 text-center flex flex-col items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-studio-primary/20 flex items-center justify-center text-studio-primary">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-white">Chưa Có Dự Án Nào</h3>
+              <p className="text-xs text-gray-400 max-w-sm">
+                Hãy bắt đầu tạo video đầu tiên bằng cách dán kịch bản hoặc chọn một kịch bản mẫu bên dưới.
+              </p>
+              <button
+                onClick={() => setShowNewModal(true)}
+                className="mt-2 px-4 py-2 bg-studio-primary hover:bg-indigo-600 text-white text-xs font-bold rounded-xl transition"
+              >
+                Tạo Dự Án Ngay
+              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {/* New Project Quick Trigger */}
-              <div
-                onClick={() => setShowNewModal(true)}
-                className="border-2 border-dashed border-studio-border hover:border-studio-primary rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer group bg-studio-surface/40 hover:bg-studio-surface/70 transition min-h-[190px]"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-studio-card group-hover:bg-studio-primary/20 flex items-center justify-center text-gray-400 group-hover:text-studio-primary transition mb-3">
-                  <PlusCircle className="w-6 h-6" />
-                </div>
-                <h3 className="font-bold text-white text-sm group-hover:text-studio-primary transition">
-                  Tạo Video Ngắn Mới
-                </h3>
-                <p className="text-xs text-gray-500 mt-1 max-w-xs">
-                  Nhập kịch bản tiếng Việt hoặc chọn kịch bản mẫu có sẵn
-                </p>
-              </div>
-
-              {/* Existing Projects */}
               {projects.map((proj) => (
                 <div
                   key={proj.id}
                   onClick={() => navigate(`/studio/${proj.id}`)}
-                  className="bg-studio-surface hover:bg-studio-card/80 border border-studio-border hover:border-studio-primary/60 rounded-2xl p-5 flex flex-col justify-between transition cursor-pointer group shadow-lg min-h-[190px]"
+                  className="group bg-studio-surface hover:bg-studio-card border border-studio-border hover:border-studio-primary/50 rounded-2xl p-5 shadow-lg transition-all cursor-pointer flex flex-col justify-between hover:shadow-2xl hover:-translate-y-0.5"
                 >
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-studio-border text-gray-300">
-                        {proj.status}
-                      </span>
+                  <div className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="text-sm font-bold text-white group-hover:text-studio-highlight transition line-clamp-1">
+                        {proj.title}
+                      </h3>
                       <button
                         onClick={(e) => handleDeleteProject(proj.id, e)}
-                        className="text-gray-500 hover:text-red-400 p-1 transition"
+                        className="text-gray-500 hover:text-red-400 transition p-1"
                         title="Xóa dự án"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
 
-                    <h3 className="font-bold text-white text-base group-hover:text-studio-accent transition line-clamp-2">
-                      {proj.title}
-                    </h3>
-                    <p className="text-xs text-gray-400 mt-1.5 line-clamp-2">
-                      {proj.description || 'Chưa có mô tả chi tiết'}
+                    <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">
+                      {proj.description || 'Chưa có mô tả chi tiết cho dự án này.'}
                     </p>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-[10px] bg-studio-primary/20 text-studio-primary border border-studio-primary/30 px-2 py-0.5 rounded-full font-mono uppercase">
+                        {proj.video_type || 'short-form'}
+                      </span>
+                      {proj.genre && (
+                        <span className="text-[10px] bg-studio-accent/20 text-studio-accent border border-studio-accent/30 px-2 py-0.5 rounded-full font-mono">
+                          {proj.genre}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="pt-4 border-t border-studio-border flex items-center justify-between text-xs text-gray-500">
-                    <div className="flex items-center gap-1.5">
+                  <div className="flex items-center justify-between pt-4 mt-2 border-t border-studio-border/50 text-[11px] text-gray-500">
+                    <span className="flex items-center gap-1">
                       <Clock className="w-3.5 h-3.5" />
-                      <span>{new Date(proj.updated_at).toLocaleDateString('vi-VN')}</span>
-                    </div>
-                    <span className="text-studio-primary group-hover:translate-x-1 transition font-semibold flex items-center gap-1">
+                      {new Date(proj.updated_at).toLocaleDateString('vi-VN')}
+                    </span>
+
+                    <span className="flex items-center gap-1 font-semibold text-studio-primary group-hover:translate-x-1 transition">
                       Mở Studio <ArrowRight className="w-3.5 h-3.5" />
                     </span>
                   </div>
@@ -255,38 +241,30 @@ export const DashboardPage: React.FC = () => {
               ))}
             </div>
           )}
+        </section>
 
-          {/* Quick Starter Templates */}
-          <div className="mt-6 pt-6 border-t border-studio-border">
-            <h3 className="text-sm font-bold text-gray-300 mb-3 flex items-center gap-2">
-              <Zap className="w-4 h-4 text-studio-highlight" />
-              Mẫu Kịch Bản Khởi Tạo Nhanh (1 Click)
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                {
-                  title: 'Hồ Gươm & Truyền Thuyết Rùa Vàng',
-                  tag: 'Lịch Sử / Văn Hóa',
-                },
-                {
-                  title: 'Bí Ẩn Về Hố Đen Vũ Trụ',
-                  tag: 'Khoa Học / Vũ Trụ',
-                },
-                {
-                  title: '5 Bí Mật Chưa Từng Kể Về Cà Phê Trứng',
-                  tag: 'Ẩm Thực / Du Lịch',
-                },
-              ].map((template, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleCreateProject(template.title)}
-                  className="bg-studio-card/60 hover:bg-studio-card border border-studio-border hover:border-gray-500 rounded-xl p-3.5 text-left transition flex flex-col justify-between"
-                >
-                  <p className="text-xs font-semibold text-white">{template.title}</p>
-                  <span className="text-[10px] text-studio-accent mt-2 font-medium">{template.tag}</span>
-                </button>
-              ))}
-            </div>
+        {/* Quick Start Templates */}
+        <section className="bg-studio-surface border border-studio-border rounded-2xl p-6 shadow-xl space-y-4">
+          <h2 className="text-sm font-bold text-white flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-studio-accent" />
+            Khởi Động Nhanh Với Thể Loại Định Hình Sẵn
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { title: 'Chiến Thắng Điện Biên Phủ 1954', genre: 'historical_doc', type: 'short-form', tag: 'Lịch Sử / 9:16' },
+              { title: 'Bí Ẩn Căn Nhà Ma Cuối Làng', genre: 'horror', type: 'short-form', tag: 'Kinh Dị / 9:16' },
+              { title: 'Tăng Trưởng Kinh Tế Việt Nam 2024', genre: 'economics', type: 'long-form', tag: 'Kinh Tế / 16:9' },
+              { title: 'Nguyên Lý Cộng Hưởng Cầu Broughton', genre: 'science', type: 'short-form', tag: 'Khoa Học / 9:16' },
+            ].map((template, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleCreateProject(template.title, template.type as any, template.genre)}
+                className="bg-studio-card/60 hover:bg-studio-card border border-studio-border hover:border-gray-500 rounded-xl p-3.5 text-left transition flex flex-col justify-between"
+              >
+                <p className="text-xs font-semibold text-white line-clamp-1">{template.title}</p>
+                <span className="text-[10px] text-studio-accent mt-2 font-medium">{template.tag}</span>
+              </button>
+            ))}
           </div>
         </section>
       </main>
@@ -295,7 +273,8 @@ export const DashboardPage: React.FC = () => {
       {showNewModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-studio-surface border border-studio-border rounded-2xl max-w-md w-full p-6 shadow-2xl flex flex-col gap-4">
-            <h3 className="text-lg font-bold text-white">Tạo Dự Án Video Mới</h3>
+            <h3 className="text-base font-bold text-white">Tạo Dự Án Video Mới</h3>
+            
             <div>
               <label className="block text-xs font-semibold text-gray-300 mb-1.5">
                 Tên Dự Án / Chủ Đề Video
@@ -306,9 +285,40 @@ export const DashboardPage: React.FC = () => {
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateProject()}
-                placeholder="Ví dụ: Lịch sử áo dài Việt Nam qua các thời kỳ..."
-                className="w-full bg-studio-bg border border-studio-border rounded-xl px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-studio-primary transition"
+                placeholder="Ví dụ: Chiến thắng Điện Biên Phủ 1954..."
+                className="w-full bg-studio-bg border border-studio-border rounded-xl px-3.5 py-2.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-studio-primary transition"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+                  Định Dạng Video
+                </label>
+                <select
+                  value={newVideoType}
+                  onChange={(e) => setNewVideoType(e.target.value as any)}
+                  className="w-full bg-studio-bg border border-studio-border rounded-xl px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-studio-primary"
+                >
+                  <option value="short-form">Shorts / TikTok (9:16)</option>
+                  <option value="long-form">Long-form (16:9)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+                  Thể Loại
+                </label>
+                <select
+                  value={newGenre}
+                  onChange={(e) => setNewGenre(e.target.value)}
+                  className="w-full bg-studio-bg border border-studio-border rounded-xl px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-studio-primary"
+                >
+                  {genres.map(g => (
+                    <option key={g.genre_id} value={g.genre_id}>{g.display_name.split(' (')[0]}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -323,7 +333,7 @@ export const DashboardPage: React.FC = () => {
                 disabled={isCreating}
                 className="px-4 py-2 bg-studio-primary hover:bg-indigo-600 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow transition"
               >
-                {isCreating ? 'Đang tạo...' : 'Tạo Dự Án'}
+                {isCreating ? 'Đang tạo...' : 'Bắt Đầu Dự Án'}
               </button>
             </div>
           </div>

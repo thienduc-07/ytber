@@ -6,6 +6,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from backend.core.config import settings
+from backend.providers.visual_classifier import AnimatedStyleValidator
 
 class DiscoveredAsset(BaseModel):
     asset_id: str
@@ -20,6 +21,8 @@ class DiscoveredAsset(BaseModel):
     width: int = 1920
     height: int = 1080
     media_type: str = Field(default="image", description="image or video")
+    is_animated: bool = True
+    visual_style: str = "2d_cartoon"
     attribution_required: bool = True
     attribution_text: Optional[str] = None
     local_url: Optional[str] = None
@@ -140,6 +143,15 @@ class WikimediaCommonsProvider(BaseAssetProvider):
                     desc_clean = re.sub(r'<[^>]+>', '', desc_raw).strip()[:200]
                     title = page_data.get("title", f"File:{page_id}").replace("File:", "").strip()
 
+                    # Gatekeeper: Strict Animated Visual Policy Check
+                    is_compliant, reason, detected_style = AnimatedStyleValidator.validate_metadata(
+                        title=title,
+                        description=desc_clean,
+                        source_url=file_url
+                    )
+                    if not is_compliant:
+                        continue
+
                     # Determine attribution requirement
                     lic_lower = license_name.lower()
                     attr_required = not ("public domain" in lic_lower or "cc0" in lic_lower or "pdm" in lic_lower)
@@ -162,6 +174,8 @@ class WikimediaCommonsProvider(BaseAssetProvider):
                         width=width,
                         height=height,
                         media_type=detected_type,
+                        is_animated=True,
+                        visual_style=detected_style,
                         attribution_required=attr_required,
                         attribution_text=attr_text,
                         preview_url=imageinfo.get("thumburl", file_url)
@@ -221,6 +235,15 @@ class OpenverseProvider(BaseAssetProvider):
                         attr_required = lic not in ("CC0", "PDM", "PUBLIC DOMAIN")
                         attr_text = f"Tác phẩm: {title[:60]} bởi {creator[:40]} ({license_name})"
 
+                        # Gatekeeper: Strict Animated Visual Policy Check
+                        is_compliant, reason, detected_style = AnimatedStyleValidator.validate_metadata(
+                            title=title,
+                            description=f"{query} {creator}",
+                            source_url=raw_url
+                        )
+                        if not is_compliant:
+                            continue
+
                         assets.append(DiscoveredAsset(
                             asset_id=f"ov_{item.get('id')}",
                             provider="openverse",
@@ -234,6 +257,8 @@ class OpenverseProvider(BaseAssetProvider):
                             width=width,
                             height=height,
                             media_type="image",
+                            is_animated=True,
+                            visual_style=detected_style,
                             attribution_required=attr_required,
                             attribution_text=attr_text,
                             preview_url=thumb

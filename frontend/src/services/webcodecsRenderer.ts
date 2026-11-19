@@ -1,5 +1,7 @@
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import type { SceneManifest, SceneItem, SubtitleItem } from '../types/database';
+import { AnimationEngine } from './animationEngine';
+import { SoundDesignEngine } from './soundDesignEngine';
 
 export interface RenderProgressEvent {
   percent: number;
@@ -103,6 +105,18 @@ export class WebCodecsRenderer {
     }
 
     return buffers;
+  }
+
+  /**
+   * Determines whether character is speaking at local normalized scene time (localT: 0..1)
+   */
+  private isSpeechActiveAt(scene: SceneItem, localT: number): boolean {
+    const currentSec = localT * scene.duration_seconds;
+    if (scene.subtitles_json && scene.subtitles_json.length > 0) {
+      const currentMs = currentSec * 1000;
+      return scene.subtitles_json.some((c) => currentMs >= c.start_ms - 50 && currentMs <= c.end_ms + 50);
+    }
+    return !!scene.audio_url && localT <= 0.85;
   }
 
   public async renderVideo(
@@ -278,57 +292,45 @@ export class WebCodecsRenderer {
       });
       audioEncoder.configure(audioConfig);
 
-      // 1. Generate & Mix Real Audio Stems (Narration PCM + Adaptive BGM Bed)
-      const finalPcmLeft = new Float32Array(totalAudioSamples);
-      const finalPcmRight = new Float32Array(totalAudioSamples);
+      // 1. Synthesize Complete 3-Layer Audio (Narration Speech + Dynamic BGM Bed + SFX Cues)
+      if (onProgress) {
+        onProgress({
+          percent: 5,
+          currentFrame: 0,
+          totalFrames: totalFrames,
+          effectiveFps: 0,
+          estimatedRemainingSec: 0,
+          statusText: 'Đang phối âm 3 lớp (Thuyết minh + Nhạc nền BGM + Hiệu ứng SFX)...',
+        });
+      }
 
-      let currentSampleOffset = 0;
-      for (let sIdx = 0; sIdx < manifest.scenes.length; sIdx++) {
-        const scene = manifest.scenes[sIdx];
-        const audioBuf = preloadedAudios.get(sIdx);
-        const sceneSampleLen = Math.round(scene.duration_seconds * sampleRate);
-
-        if (audioBuf) {
-          const chan0 = audioBuf.getChannelData(0);
-          const chan1 = audioBuf.numberOfChannels > 1 ? audioBuf.getChannelData(1) : chan0;
-          const copyLen = Math.min(audioBuf.length, totalAudioSamples - currentSampleOffset);
-
-          for (let s = 0; s < copyLen; s++) {
-            finalPcmLeft[currentSampleOffset + s] += chan0[s];
-            finalPcmRight[currentSampleOffset + s] += chan1[s];
+      const interleavedAudio = await SoundDesignEngine.synthesizeCompleteAudio(
+        manifest,
+        preloadedAudios,
+        totalAudioSamples,
+        fps,
+        (p) => {
+          if (onProgress) {
+            onProgress({
+              percent: Math.round(5 + (p.percent / 100) * 10),
+              currentFrame: 0,
+              totalFrames: totalFrames,
+              effectiveFps: 0,
+              estimatedRemainingSec: 0,
+              statusText: p.status,
+            });
           }
         }
-        currentSampleOffset += sceneSampleLen;
-      }
+      );
 
-      // Mix subtle rhythmic BGM bed with dynamic ducking (quieter during narration)
-      for (let i = 0; i < totalAudioSamples; i++) {
-        const t = i / sampleRate;
-        const narrationActive = Math.abs(finalPcmLeft[i]) > 0.05 || Math.abs(finalPcmRight[i]) > 0.05;
-        const bgmGain = narrationActive ? 0.03 : 0.08;
-
-        const bass = Math.sin(2 * Math.PI * 110 * t) * 0.15;
-        const sub = Math.sin(2 * Math.PI * 165 * t) * 0.08;
-        const bgmSample = (bass + sub) * bgmGain;
-
-        finalPcmLeft[i] = Math.max(-1.0, Math.min(1.0, finalPcmLeft[i] + bgmSample));
-        finalPcmRight[i] = Math.max(-1.0, Math.min(1.0, finalPcmRight[i] + bgmSample));
-      }
-
-      // Encode audio chunks
+      // Encode audio chunks (48000 stereo sample frames at a time)
       let samplesProcessed = 0;
       while (samplesProcessed < totalAudioSamples) {
         if (this.cancelled) throw new Error('Video rendering was cancelled');
         if (encodingError) throw encodingError;
 
         const chunkSize = Math.min(48000, totalAudioSamples - samplesProcessed);
-        const pcmInterleaved = new Float32Array(chunkSize * 2);
-
-        for (let i = 0; i < chunkSize; i++) {
-          const idx = samplesProcessed + i;
-          pcmInterleaved[i * 2] = finalPcmLeft[idx];
-          pcmInterleaved[i * 2 + 1] = finalPcmRight[idx];
-        }
+        const pcmInterleaved = interleavedAudio.subarray(samplesProcessed * 2, (samplesProcessed + chunkSize) * 2);
 
         const timestampMicro = Math.round((samplesProcessed * 1_000_000) / sampleRate);
         const audioData = new (window as any).AudioData({
@@ -348,7 +350,7 @@ export class WebCodecsRenderer {
 
       const startTime = performance.now();
 
-      // 2. Render & Encode Visual Frames with Real Images and Animated Subtitles
+      // 2. Render & Encode Visual Frames with 100% Animated Visuals & Synchronized Subtitles
       let sceneStartFrame = 0;
       for (let sIdx = 0; sIdx < manifest.scenes.length; sIdx++) {
         const scene = manifest.scenes[sIdx];
@@ -368,29 +370,44 @@ export class WebCodecsRenderer {
           const globalT = globalFrame / fps;
           const localT = f / sceneFrames;
 
-          // Render Real Image or Fallback Visuals
-          if (currentBmp) {
-            this.renderImageWithKenBurns(ctx, currentBmp, width, height, localT);
-          } else {
-            this.renderFallbackVisuals(ctx, width, height, scene, localT, globalT);
-          }
+          // Render 100% Animated Visuals (Parallax, Characters, Maps, Infographics, Particles)
+          const isSpeaking = this.isSpeechActiveAt(scene, localT);
+          AnimationEngine.renderScene(
+            ctx,
+            width,
+            height,
+            scene,
+            localT,
+            globalT,
+            manifest.character_registry,
+            isSpeaking,
+            currentBmp
+          );
 
           // Scene Transition (Crossfade in last 15 frames if dissolve/fade)
           const transitionFrames = 15;
           const framesRemaining = sceneFrames - f;
-          if (framesRemaining <= transitionFrames && nextBmp && scene.transition !== 'cut') {
+          if (framesRemaining <= transitionFrames && sIdx + 1 < manifest.scenes.length && scene.transition !== 'cut') {
+            const nextScene = manifest.scenes[sIdx + 1];
             const blendAlpha = (transitionFrames - framesRemaining) / transitionFrames;
             ctx.save();
             ctx.globalAlpha = Math.min(1.0, Math.max(0.0, blendAlpha));
-            this.renderImageWithKenBurns(ctx, nextBmp, width, height, 0);
+            AnimationEngine.renderScene(
+              ctx,
+              width,
+              height,
+              nextScene,
+              0,
+              globalT,
+              manifest.character_registry,
+              false,
+              nextBmp
+            );
             ctx.restore();
           }
 
           // Render Animated Vietnamese Karaoke Subtitles (Synced with Phase 2 Word Boundaries)
           this.renderSubtitles(ctx, width, height, scene, localT);
-
-          // Render Scene Order and Method Badge
-          this.renderBadge(ctx, width, height, scene, currentBmp !== null);
 
           // Create and encode VideoFrame
           const timestampMicro = Math.round((globalFrame * 1_000_000) / fps);
@@ -429,7 +446,7 @@ export class WebCodecsRenderer {
               totalFrames: totalFrames,
               effectiveFps: Math.round(currentFps),
               estimatedRemainingSec: Math.round(estRemaining),
-              statusText: `Đang kết xuất khung hình ${globalFrame + 1}/${totalFrames} (Cảnh ${scene.scene_order}: ${currentBmp ? 'Hình ảnh thực' : 'Đồ họa'})`,
+              statusText: `Đang kết xuất hoạt hình ${globalFrame + 1}/${totalFrames} (Cảnh ${scene.scene_order}: ${scene.visual_method || 'Hoạt hình 2D'})`,
             });
           }
         }
@@ -521,118 +538,7 @@ export class WebCodecsRenderer {
     }
   }
 
-  /**
-   * Renders real image with cover aspect ratio fitting and smooth Ken Burns motion
-   */
-  private renderImageWithKenBurns(
-    ctx: CanvasRenderingContext2D,
-    img: ImageBitmap,
-    w: number,
-    h: number,
-    t: number // 0 to 1
-  ) {
-    const zoom = 1.0 + t * 0.12; // 12% subtle continuous push-in
-    const panX = (t - 0.5) * (img.width * 0.05); // subtle 5% pan
-    const panY = (t - 0.5) * (img.height * 0.03);
 
-    const imgAspect = img.width / img.height;
-    const targetAspect = w / h;
-    let sW: number, sH: number, sX: number, sY: number;
-
-    if (imgAspect > targetAspect) {
-      sH = img.height / zoom;
-      sW = sH * targetAspect;
-    } else {
-      sW = img.width / zoom;
-      sH = sW / targetAspect;
-    }
-
-    sX = Math.max(0, Math.min(img.width - sW, (img.width - sW) / 2 + panX));
-    sY = Math.max(0, Math.min(img.height - sH, (img.height - sH) / 2 + panY));
-
-    // Clear and draw image
-    ctx.drawImage(img, sX, sY, sW, sH, 0, 0, w, h);
-
-    // Subtle edge vignette overlay
-    const vignette = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.4, w / 2, h / 2, Math.max(w, h) * 0.8);
-    vignette.addColorStop(0, 'rgba(0,0,0,0)');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.45)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, w, h);
-  }
-
-  /**
-   * Renders visually meaningful fallback graphic card when asset is pending or unavailable
-   */
-  private renderFallbackVisuals(
-    ctx: CanvasRenderingContext2D,
-    w: number,
-    h: number,
-    scene: SceneItem,
-    _t: number,
-    globalT: number
-  ) {
-    const grad = ctx.createLinearGradient(0, 0, w, h);
-    if (scene.visual_method === 'archival') {
-      grad.addColorStop(0, '#2b231d');
-      grad.addColorStop(1, '#15110e');
-    } else if (scene.visual_method === 'map') {
-      grad.addColorStop(0, '#1a2936');
-      grad.addColorStop(1, '#0e171f');
-    } else {
-      const r = Math.sin(globalT * 0.8) * 20 + 35;
-      const b = Math.cos(globalT * 0.8) * 30 + 75;
-      grad.addColorStop(0, `rgb(${r}, 25, ${b})`);
-      grad.addColorStop(1, '#110e1a');
-    }
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-
-    // Focal card with description
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.roundRect(120, 350, w - 240, h / 2, 32);
-    ctx.fill();
-    ctx.strokeStyle = '#FFB36B';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 36px "Be Vietnam Pro", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('TƯ LIỆU MINH HỌA', w / 2, 450);
-
-    ctx.fillStyle = '#A0AEC0';
-    ctx.font = '28px "Be Vietnam Pro", sans-serif';
-    const desc = scene.visual_description || scene.narration_text;
-    const shortDesc = desc.length > 70 ? desc.slice(0, 70) + '...' : desc;
-    ctx.fillText(shortDesc, w / 2, 520);
-  }
-
-  /**
-   * Renders scene status badge
-   */
-  private renderBadge(
-    ctx: CanvasRenderingContext2D,
-    w: number,
-    h: number,
-    scene: SceneItem,
-    hasRealAsset: boolean
-  ) {
-    const badgeX = Math.round(w * 0.06);
-    const badgeY = Math.round(h * 0.06);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.70)';
-    ctx.roundRect(badgeX, badgeY, 440, 70, 16);
-    ctx.fill();
-
-    ctx.fillStyle = hasRealAsset ? '#00FF66' : '#FFB36B';
-    ctx.font = 'bold 24px "Be Vietnam Pro", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(
-      `CẢNH ${scene.scene_order}: ${hasRealAsset ? 'TƯ LIỆU THỰC' : scene.visual_method.toUpperCase()}`,
-      badgeX + 25,
-      badgeY + 44
-    );
-  }
 
   /**
    * Renders synchronized Vietnamese animated subtitles using Phase 2 word cues

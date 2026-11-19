@@ -6,6 +6,7 @@ from backend.providers.ai_base import (
     ResearchEntity, SoundDesignCue
 )
 from backend.providers.genre_intelligence import get_genre_profile, GenreProfile
+from backend.providers.director_engine import AIDirectorEngine
 
 def count_vietnamese_syllables(text: str) -> int:
     clean = re.sub(r'[^\w\s]', ' ', text, flags=re.UNICODE)
@@ -232,10 +233,15 @@ class RuleBasedScriptProvider(AIScriptProvider):
         total_syllables = sum(count_vietnamese_syllables(s) for s in raw_sentences)
         syllables_per_sec = profile.syllables_per_second
 
+        # Initialize AI Director for semantic intelligence & character consistency
+        director = AIDirectorEngine()
+        semantics = director.analyze_topic_semantics(script_text, genre)
+        characters = director.build_character_registry(semantics.topic_category, script_text)
+
         scenes: List[ScenePlan] = []
         stages = profile.narrative_stages
 
-        # Distribute sentences across narrative stages
+        # Distribute sentences across narrative stages and direct each scene
         for idx, sentence in enumerate(raw_sentences):
             s_count = count_vietnamese_syllables(sentence)
             calc_dur = max(profile.min_scene_sec, min(profile.max_scene_sec, round(s_count / syllables_per_sec, 1)))
@@ -249,23 +255,46 @@ class RuleBasedScriptProvider(AIScriptProvider):
 
             sound_cues = self._generate_sound_cues(scene_type, profile)
 
+            # Direct scene production using AI Director Engine
+            directed = director.direct_scene_production(
+                scene_idx=idx + 1,
+                total_scenes=len(raw_sentences),
+                sentence=sentence,
+                semantics=semantics,
+                characters=characters,
+                genre_prof=profile
+            )
+
             scenes.append(ScenePlan(
                 scene_id=f"scene_{idx+1:03d}",
                 scene_order=idx + 1,
                 chapter_order=(idx // 4) + 1 if video_format == "long-form" else 1,
+                narrative_purpose=directed.narrative_purpose,
                 scene_type=scene_type,
                 narration_text=sentence,
                 duration_seconds=calc_dur,
                 visual_method=visual_method,
-                visual_description=visual_desc,
+                visual_description=visual_desc or directed.visual_description,
+                environment=directed.environment,
+                character_descriptions=directed.character_descriptions,
+                character_poses=directed.character_poses,
+                character_poses_actions=directed.character_poses,
+                props=directed.props,
+                camera_angle=directed.camera_angle,
+                camera_movement=directed.camera_movement,
+                camera_direction=directed.camera_direction or profile.camera_style,
+                animation_instructions=directed.animation_instructions,
+                lighting=directed.lighting,
+                color_palette=directed.color_palette,
+                transition=directed.transition or profile.transition_style,
+                transition_type=directed.transition_type or profile.transition_style,
+                music_direction=directed.music_direction,
+                sound_design=sound_cues or directed.sound_design,
+                sound_effects=directed.sound_effects or sound_cues,
                 suggested_asset_keywords=keywords,
                 search_keywords=keywords,
                 preferred_media_type="image",
                 preferred_aspect_ratio="16:9" if video_format == "long-form" else "9:16",
-                camera_direction=profile.camera_style,
-                transition=profile.transition_style,
-                transition_type=profile.transition_style,
-                sound_design=sound_cues,
                 source_references=[f"Nguồn tư liệu kiểm chứng cảnh {idx+1}"]
             ))
 
@@ -312,6 +341,14 @@ class RuleBasedScriptProvider(AIScriptProvider):
             genre=profile.genre_id,
             video_format=video_format,
             aspect_ratio=aspect_ratio,
+            main_subject=semantics.main_subject,
+            topic_category=semantics.topic_category,
+            context_era=semantics.context_era,
+            narrative_arc=semantics.narrative_structure,
+            emotional_tone=semantics.emotional_tone,
+            target_audience=semantics.target_audience,
+            visual_style_preset=visual_style,
+            character_registry=characters,
             estimated_syllables=total_syllables,
             estimated_duration_seconds=round(total_calc_duration, 1),
             hook_summary=raw_sentences[0][:120],

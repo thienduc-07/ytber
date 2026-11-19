@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import type { SceneManifest } from '../../types/database';
+import { AnimationEngine } from '../../services/animationEngine';
 import { Play, Pause, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 
 interface RemotionPlayerProps {
@@ -31,59 +32,57 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
     canvas.width = w;
     canvas.height = h;
 
-    // Find active scene
+    // Find active scene and local normalized progress
     let accumulatedTime = 0;
     let activeScene = manifest.scenes[0];
+    let localT = 0;
 
     for (const scene of manifest.scenes) {
       if (localTime >= accumulatedTime && localTime <= accumulatedTime + scene.duration_seconds) {
         activeScene = scene;
+        localT = (localTime - accumulatedTime) / Math.max(0.1, scene.duration_seconds);
         break;
       }
       accumulatedTime += scene.duration_seconds;
     }
 
-    // Render Preview Frame
-    const grad = ctx.createLinearGradient(0, 0, w, h);
-    if (manifest.genre === 'horror') {
-      grad.addColorStop(0, '#0a0a0f');
-      grad.addColorStop(1, '#020204');
-    } else if (manifest.genre === 'economics') {
-      grad.addColorStop(0, '#0f172a');
-      grad.addColorStop(1, '#020617');
-    } else {
-      grad.addColorStop(0, '#1c1c2b');
-      grad.addColorStop(1, '#0d0d12');
-    }
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-
-    // Visual modality indicator
-    ctx.fillStyle = manifest.genre === 'horror' ? '#EF4444' : '#FFB36B';
-    ctx.font = 'bold 44px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`CẢNH: ${activeScene?.scene_type?.toUpperCase() || 'NARRATIVE'}`, w / 2, h * 0.22);
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '32px sans-serif';
-    ctx.fillText(`Phương thức: ${activeScene?.visual_method?.toUpperCase() || 'PHOTO'}`, w / 2, h * 0.27);
-
-    // Subtitle card preview
     if (activeScene) {
-      ctx.fillStyle = 'rgba(0,0,0,0.8)';
-      const subY = h * 0.75;
-      const subH = Math.min(160, h * 0.15);
-      ctx.roundRect(w * 0.08, subY, w * 0.84, subH, 24);
+      // 1. Render Rich Temporal Animation (Parallax, Vector Characters, Maps, Infographics, Particles)
+      const isSpeaking = isPlaying && !!activeScene.narration_text;
+      AnimationEngine.renderScene(
+        ctx,
+        w,
+        h,
+        activeScene,
+        localT,
+        localTime,
+        manifest.character_registry,
+        isSpeaking
+      );
+
+      // 2. Render Synchronized Subtitle Overlay
+      const subY = Math.round(h * 0.78);
+      const subH = Math.min(180, Math.round(h * 0.16));
+      const cardW = Math.round(w * 0.88);
+      const cardX = Math.round((w - cardW) / 2);
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(10, 8, 16, 0.85)';
+      ctx.roundRect(cardX, subY - subH / 2, cardW, subH, 24);
       ctx.fill();
+      ctx.strokeStyle = '#2A2238';
+      ctx.lineWidth = 3;
+      ctx.stroke();
 
       ctx.fillStyle = '#FFDF00';
-      ctx.font = 'bold 40px "Be Vietnam Pro", sans-serif';
-      const displayText = activeScene.narration_text.length > 50 
-        ? activeScene.narration_text.slice(0, 50) + '...'
+      ctx.font = 'bold 36px "Be Vietnam Pro", sans-serif';
+      const displayText = activeScene.narration_text.length > 55
+        ? activeScene.narration_text.slice(0, 55) + '...'
         : activeScene.narration_text;
-      ctx.fillText(displayText, w / 2, subY + subH * 0.6);
+      ctx.fillText(displayText, w / 2, subY);
     }
-  }, [localTime, manifest]);
+  }, [localTime, manifest, isPlaying]);
 
   // Animation playback loop
   useEffect(() => {

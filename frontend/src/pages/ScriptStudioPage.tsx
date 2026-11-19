@@ -63,18 +63,10 @@ export const ScriptStudioPage: React.FC = () => {
         duration_seconds: 7.5,
         start_frame: 0,
         end_frame: 225,
-        visual_method: 'archival',
+        visual_method: 'map',
         visual_config: {},
         subtitles_json: [],
-        assets: [
-          {
-            asset_type: 'image',
-            source_url: 'https://images.unsplash.com/photo-1528127269322-539801943592?auto=format&fit=crop&w=1080&q=80',
-            license_type: 'Public Domain',
-            author_name: 'Archival Collection',
-            attribution_text: 'Tư liệu lịch sử Việt Nam',
-          }
-        ],
+        assets: [],
       },
       {
         scene_order: 2,
@@ -83,7 +75,7 @@ export const ScriptStudioPage: React.FC = () => {
         duration_seconds: 9.0,
         start_frame: 225,
         end_frame: 495,
-        visual_method: 'photo',
+        visual_method: 'toon',
         visual_config: {},
         subtitles_json: [],
         assets: [],
@@ -95,7 +87,7 @@ export const ScriptStudioPage: React.FC = () => {
         duration_seconds: 8.5,
         start_frame: 495,
         end_frame: 750,
-        visual_method: 'procedural',
+        visual_method: 'toon',
         visual_config: {},
         subtitles_json: [],
         assets: [],
@@ -107,7 +99,7 @@ export const ScriptStudioPage: React.FC = () => {
         duration_seconds: 9.5,
         start_frame: 750,
         end_frame: 1035,
-        visual_method: 'archival',
+        visual_method: 'toon',
         visual_config: {},
         subtitles_json: [],
         assets: [],
@@ -611,7 +603,7 @@ export const ScriptStudioPage: React.FC = () => {
               className="w-full py-2 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition"
             >
               <ImageIcon className="w-3.5 h-3.5" />
-              <span>{isDiscoveringAssets ? 'Đang tìm & tải tư liệu thực...' : 'Tự Động Ghép Tư Liệu Thực'}</span>
+              <span>{isDiscoveringAssets ? 'Đang tìm & tải tư liệu hoạt họa...' : 'Tự Động Ghép Tư Liệu Hoạt Họa (100% Vector/Toon)'}</span>
             </button>
 
             <button

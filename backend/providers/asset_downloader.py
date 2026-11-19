@@ -118,7 +118,8 @@ class AssetDownloaderService:
         url: str,
         user_id: str = "system",
         max_size_bytes: Optional[int] = None,
-        timeout_sec: Optional[float] = None
+        timeout_sec: Optional[float] = None,
+        enforce_animated_policy: bool = False
     ) -> Dict[str, Any]:
         """
         Downloads external media asset securely with SSRF defense, streaming verification,
@@ -205,6 +206,14 @@ class AssetDownloaderService:
                     # Reopen to read dimensions after verify()
                     with Image.open(temp_path) as img:
                         width, height = img.size
+
+                    if enforce_animated_policy:
+                        from backend.providers.visual_classifier import AnimatedStyleValidator
+                        is_anim, reason, style = AnimatedStyleValidator.validate_image_file(temp_path)
+                        if not is_anim:
+                            raise ValueError(f"Vi phạm chính sách 100% hình ảnh hoạt hình: {reason}")
+                except ValueError:
+                    raise
                 except Exception as img_err:
                     raise ValueError(f"Tập tin hình ảnh bị lỗi hoặc không thể giải mã: {str(img_err)}")
 

@@ -1,0 +1,71 @@
+{
+  "timestamp": "2026-11-19T21:03:35Z",
+  "total_topics": 5,
+  "results": [
+    {
+      "topic_id": "topic_1_dien_bien_phu",
+      "topic_name": "Chiến thắng Điện Biên Phủ 1954",
+      "genre": "historical_doc",
+      "scenes_planned": 3,
+      "characters_registered": 2,
+      "render_and_verification_time_sec": 0.32,
+      "aqc_overall_passed": true,
+      "temporal_motion_delta": 0.0136,
+      "animated_policy_ratio": 1.0,
+      "audio_rms": 0.2065,
+      "verdict": "PASSED: Production-Grade Animated Shorts Verified"
+    },
+    {
+      "topic_id": "topic_2_inflation",
+      "topic_name": "Lạm phát và Sức mua Đồng tiền",
+      "genre": "economics",
+      "scenes_planned": 3,
+      "characters_registered": 1,
+      "render_and_verification_time_sec": 0.29,
+      "aqc_overall_passed": true,
+      "temporal_motion_delta": 0.02141,
+      "animated_policy_ratio": 1.0,
+      "audio_rms": 0.2065,
+      "verdict": "PASSED: Production-Grade Animated Shorts Verified"
+    },
+    {
+      "topic_id": "topic_3_ai_tech",
+      "topic_name": "Trí tuệ Nhân tạo AI và Tương lai",
+      "genre": "technology",
+      "scenes_planned": 3,
+      "characters_registered": 1,
+      "render_and_verification_time_sec": 0.33,
+      "aqc_overall_passed": true,
+      "temporal_motion_delta": 0.01035,
+      "animated_policy_ratio": 1.0,
+      "audio_rms": 0.2065,
+      "verdict": "PASSED: Production-Grade Animated Shorts Verified"
+    },
+    {
+      "topic_id": "topic_4_solar_system",
+      "topic_name": "Bí ẩn Hệ Mặt Trời và Không gian",
+      "genre": "science",
+      "scenes_planned": 3,
+      "characters_registered": 1,
+      "render_and_verification_time_sec": 0.29,
+      "aqc_overall_passed": true,
+      "temporal_motion_delta": 0.01152,
+      "animated_policy_ratio": 1.0,
+      "audio_rms": 0.2065,
+      "verdict": "PASSED: Production-Grade Animated Shorts Verified"
+    },
+    {
+      "topic_id": "topic_5_climate_change",
+      "topic_name": "Biến đổi Khí hậu và Năng lượng Xanh",
+      "genre": "environment",
+      "scenes_planned": 3,
+      "characters_registered": 1,
+      "render_and_verification_time_sec": 0.31,
+      "aqc_overall_passed": true,
+      "temporal_motion_delta": 0.00891,
+      "animated_policy_ratio": 1.0,
+      "audio_rms": 0.2065,
+      "verdict": "PASSED: Production-Grade Animated Shorts Verified"
+    }
+  ]
+}

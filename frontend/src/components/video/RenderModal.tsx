@@ -64,7 +64,9 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
       const url = URL.createObjectURL(renderRes.blob);
       setVideoUrl(url);
     } catch (err: any) {
-      setError(err?.message || 'Có lỗi xảy ra trong quá trình kết xuất video');
+      if (err?.message !== 'Video rendering was cancelled') {
+        setError(err?.message || 'Có lỗi xảy ra trong quá trình kết xuất video');
+      }
     } finally {
       setIsRendering(false);
       rendererRef.current = null;

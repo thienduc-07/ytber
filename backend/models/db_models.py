@@ -130,9 +130,13 @@ class AudioFileModel(Base):
 
     id = Column(String(36), primary_key=True)
     user_id = Column(String(64), nullable=False, index=True)
-    filename = Column(String(255), nullable=False, unique=True, index=True)
+    filename = Column(String(255), nullable=False, index=True)
     duration_seconds = Column(Float, default=0.0)
     created_at = Column(String(32), default=lambda: datetime.utcnow().isoformat() + "Z")
+
+    __table_args__ = (
+        Index("idx_audio_filename_user", "filename", "user_id", unique=True),
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         return {

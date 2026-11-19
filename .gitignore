@@ -30,6 +30,8 @@ env/
 *.sqlite
 *.sqlite3
 data/audio/*.mp3
+data/audio/*.meta.json
+data/audio/*.tmp
 !data/audio/.gitkeep
 
 # Remotion temporary bundles

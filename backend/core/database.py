@@ -58,12 +58,28 @@ def init_db_sync() -> None:
             cursor.close()
 
     Base.metadata.create_all(sync_engine)
+    if "sqlite" in sync_url:
+        with sync_engine.connect() as conn:
+            try:
+                conn.execute(text("DROP INDEX IF EXISTS ix_audio_files_filename;"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audio_files_filename ON audio_files (filename);"))
+                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_filename_user ON audio_files (filename, user_id);"))
+                conn.commit()
+            except Exception:
+                pass
     sync_engine.dispose()
 
 async def init_db() -> None:
     """Initialize database tables idempotently."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if "sqlite" in settings.DATABASE_URL:
+            try:
+                await conn.execute(text("DROP INDEX IF EXISTS ix_audio_files_filename;"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audio_files_filename ON audio_files (filename);"))
+                await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_filename_user ON audio_files (filename, user_id);"))
+            except Exception:
+                pass
 
 # Ensure tables exist immediately on module import (vital for TestClient & CLI tools)
 try:

@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     
     # Audio Storage Directory for synthesized TTS voices
     AUDIO_STORAGE_PATH: str = "./data/audio"
+    MAX_TTS_CONCURRENCY: int = 2
+    TTS_TIMEOUT_SECONDS: float = 45.0
+    TTS_MAX_CHUNK_CHARS: int = 250
+    TTS_CACHE_ENABLED: bool = True
+    TTS_CACHE_TTL_SECONDS: int = 604800  # 7 days
 
     # Supabase Credentials (for cloud multi-tenancy)
     SUPABASE_URL: str = "https://placeholder-project.supabase.co"

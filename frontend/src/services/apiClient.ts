@@ -437,6 +437,21 @@ export const apiClient = {
     return await res.json();
   },
 
+  getSFXAudioUrl(sfxId: string): string {
+    return `${API_BASE}/soundscape/audio/${sfxId}`;
+  },
+
+  async autoEnrichSoundscape(manifest: any): Promise<any> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/soundscape/auto-enrich`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ manifest }),
+    });
+    if (!res.ok) throw new Error(`Tự động phối âm thanh thất bại (${res.status})`);
+    return await res.json();
+  },
+
   // 8. VoiceStudio Integration & TTS Configuration
   async fetchTTSSettings(): Promise<any> {
     const res = await fetch(`${API_BASE}/tts/settings`);

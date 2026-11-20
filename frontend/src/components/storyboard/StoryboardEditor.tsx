@@ -52,6 +52,30 @@ export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
   const [sfxCategory, setSfxCategory] = useState<string>('');
   const [isSearchingSFX, setIsSearchingSFX] = useState(false);
   const [sfxResults, setSfxResults] = useState<any[]>([]);
+  const [isAutoEnriching, setIsAutoEnriching] = useState(false);
+
+  const handleAutoEnrich = async () => {
+    setIsAutoEnriching(true);
+    try {
+      const enriched = await apiClient.autoEnrichSoundscape(manifest);
+      onChange(enriched);
+    } catch (e: any) {
+      console.warn('Auto enrich soundscape failed:', e);
+    } finally {
+      setIsAutoEnriching(false);
+    }
+  };
+
+  const handlePlaySFXPreview = (sfxId: string) => {
+    try {
+      const audioUrl = apiClient.getSFXAudioUrl(sfxId);
+      const audio = new Audio(audioUrl);
+      audio.volume = 0.7;
+      audio.play().catch((err) => console.warn('SFX preview playback failed:', err));
+    } catch (e) {
+      console.warn('Could not play SFX:', e);
+    }
+  };
 
   const handleSearchSFX = async (q: string, cat?: string) => {
     setIsSearchingSFX(true);
@@ -190,13 +214,24 @@ export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
           </span>
         </div>
 
-        <button
-          onClick={handleAddScene}
-          className="flex items-center gap-1.5 text-xs font-semibold bg-studio-primary hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg transition shadow"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Thêm Cảnh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleAutoEnrich}
+            disabled={isAutoEnriching}
+            className="flex items-center gap-1.5 text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition shadow"
+            title="Tự động phân tích kịch bản và gán nhạc nền & sound effects chân thực cho từng cảnh"
+          >
+            <Music className="w-3.5 h-3.5" />
+            {isAutoEnriching ? 'Đang phối âm...' : 'AI Tự Động Phối Âm & SFX'}
+          </button>
+          <button
+            onClick={handleAddScene}
+            className="flex items-center gap-1.5 text-xs font-semibold bg-studio-primary hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg transition shadow"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Thêm Cảnh
+          </button>
+        </div>
       </div>
 
       {/* Scene list cards */}
@@ -522,13 +557,23 @@ export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleAddSFXToScene(sfx)}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg flex items-center gap-1 transition shadow"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Thêm vào cảnh
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handlePlaySFXPreview(sfx.id)}
+                      className="px-2.5 py-1.5 bg-studio-card hover:bg-studio-border text-gray-200 hover:text-white text-xs font-semibold rounded-lg flex items-center gap-1 transition border border-studio-border"
+                      title="Nghe thử âm thanh thực tế"
+                    >
+                      <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                      Nghe thử
+                    </button>
+                    <button
+                      onClick={() => handleAddSFXToScene(sfx)}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg flex items-center gap-1 transition shadow"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Thêm vào cảnh
+                    </button>
+                  </div>
                 </div>
               ))}
 

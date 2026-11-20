@@ -66,3 +66,49 @@ async def detect_scene_soundscape(req: DetectSoundscapeRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi phân tích âm thanh cảnh: {str(e)}"
         )
+
+
+@router.get("/audio/{sfx_id}")
+async def get_sfx_audio_preview(sfx_id: str):
+    """
+    Returns audio preview stream for the specified sound effect.
+    Synthesizes acoustic audio file on the fly if not yet cached.
+    """
+    import os
+    from fastapi.responses import FileResponse
+    from backend.core.config import settings
+
+    storage_dir = getattr(settings, "AUDIO_STORAGE_PATH", "./data/audio")
+    sfx_dir = os.path.join(storage_dir, "sfx")
+    os.makedirs(sfx_dir, exist_ok=True)
+
+    clean_id = "".join(c for c in sfx_id if c.isalnum() or c in ("_", "-"))
+    file_path = os.path.join(sfx_dir, f"{clean_id}.mp3")
+
+    if not os.path.exists(file_path):
+        AISoundscapeDirector.synthesize_sfx_file(clean_id, file_path)
+
+    return FileResponse(
+        path=file_path,
+        media_type="audio/mpeg",
+        filename=f"{clean_id}.mp3"
+    )
+
+
+class AutoEnrichRequest(BaseModel):
+    manifest: Dict[str, Any]
+
+
+@router.post("/auto-enrich")
+async def auto_enrich_manifest_sound(req: AutoEnrichRequest):
+    """
+    Scans every scene in the manifest, automatically determines narrative mood and action beats,
+    and assigns optimal environmental soundscapes, action SFX cues, and thematic background music.
+    """
+    manifest = req.manifest
+    scenes = manifest.get("scenes", [])
+    if not scenes:
+        return manifest
+
+    enriched = AISoundscapeDirector.enrich_manifest_soundscapes(manifest)
+    return enriched

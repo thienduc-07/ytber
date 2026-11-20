@@ -26,6 +26,9 @@ import shutil
 import subprocess
 from typing import Dict, Any, List, Optional
 from backend.providers.tts_engine import UnifiedTTSProvider, WordTiming
+from backend.providers.character_rig_2d import CharacterRig2D
+from backend.providers.environment_builder_2d import EnvironmentBuilder2D
+from backend.providers.soundscape_engine import AISoundscapeDirector
 
 
 class HyperFramesAdapter:
@@ -97,7 +100,21 @@ class HyperFramesAdapter:
         """Selects the best code-first visual grammar for the narrative beat."""
         text = (scene.get("narration_text") or "").lower()
         vis_method = scene.get("visual_method") or ""
+        cat = (genre or "").lower()
 
+        # 1. Horror & Creepy Urban Legend (Articulated 2D Character Rig & Illustrated Environment)
+        is_horror = "horror" in cat or any(w in text for w in ["ma", "kinh dị", "quỷ", "bóng đè", "rùng rợn", "ngôi nhà hoang", "nghĩa địa", "tiếng gõ", "nửa đêm", "ác mộng"])
+        if is_horror:
+            horror_grammars = ["horror_bedroom_flashlight", "horror_dark_corridor", "horror_shadow_encounter", "horror_shock_recoil"]
+            return horror_grammars[(scene_idx - 1) % len(horror_grammars)]
+
+        # 2. Historical Narrative (Articulated Military Rigs, Dien Bien Phu Basin, Command Bunker, Victory Flag)
+        is_history = "historical" in cat or any(w in text for w in ["điện biên", "1954", "pháo", "kéo pháo", "tướng", "chỉ huy", "chiến thắng", "kháng chiến", "đờ cát", "de castries", "quân đội", "hào hùng"])
+        if is_history:
+            history_grammars = ["history_mountain_artillery", "history_command_bunker", "tactical_map", "history_victory_flag"]
+            return history_grammars[(scene_idx - 1) % len(history_grammars)]
+
+        # 3. Specific content triggers
         if any(w in text for w in ["bản đồ", "thung lũng", "địa cầu", "tây bắc", "núi", "đèo", "lòng chảo", "chiến dịch", "vị trí", "địa điểm", "hướng tiến"]):
             return "tactical_map"
         elif any(w in text for w in ["năm", "tháng", "ngày", "lịch sử", "thời gian", "giai đoạn", "bắt đầu", "kết thúc", "cột mốc"]):
@@ -106,7 +123,7 @@ class HyperFramesAdapter:
             return "data_counter_chart"
         elif any(w in text for w in ["chỉ huy", "đại tướng", "quyết định", "mật lệnh", "kế hoạch", "hồ sơ", "tài liệu", "hầm"]):
             return "archival_blueprint"
-        elif any(w in text for w in ["kéo pháo", "chiến đấu", "gian khổ", "đêm", "rừng", "chiến sĩ", "hành quân", "khói lửa"]):
+        elif any(w in text for w in ["chiến đấu", "gian khổ", "đêm", "rừng", "chiến sĩ", "hành quân", "khói lửa"]):
             return "parallax_environment"
         elif scene_idx == 1 or scene_idx == total_scenes:
             return "kinetic_statement"
@@ -192,10 +209,25 @@ class HyperFramesAdapter:
                 f'<audio id="voice_{idx}" class="clip" src="{voice_rel_path}" data-start="{start_time}" data-duration="{duration}" data-volume="1.0" data-track-index="2"></audio>'
             )
 
-            # SFX Cue per scene cut
-            audio_elements.append(
-                f'<audio id="sfx_whoosh_{idx}" class="clip" src="assets/audio/sfx_whoosh.mp3" data-start="{start_time}" data-duration="0.8" data-volume="0.35" data-track-index="3"></audio>'
-            )
+            # SFX Cue per scene: Contextual action SFX or dynamic transition whoosh
+            sfx_list = scene.get("sfx_cues") or []
+            if sfx_list:
+                top_sfx = sfx_list[0]
+                sfx_id = top_sfx.get("sfx_id") or "sfx_whoosh"
+                clean_sfx_id = "".join(c for c in sfx_id if c.isalnum() or c in ("_", "-"))
+                sfx_file = f"assets/audio/{clean_sfx_id}.mp3"
+                sfx_dest = os.path.join(job_dir, sfx_file)
+                AISoundscapeDirector.synthesize_sfx_file(clean_sfx_id, sfx_dest)
+                sfx_vol = top_sfx.get("volume", 0.45)
+                sfx_offset = min(1.0, round(float(top_sfx.get("start_time_offset_ms", 0)) / 1000.0, 2))
+                sfx_time = round(start_time + sfx_offset, 2)
+                audio_elements.append(
+                    f'<audio id="sfx_{idx}" class="clip" src="{sfx_file}" data-start="{sfx_time}" data-duration="1.8" data-volume="{sfx_vol}" data-track-index="3"></audio>'
+                )
+            else:
+                audio_elements.append(
+                    f'<audio id="sfx_whoosh_{idx}" class="clip" src="assets/audio/sfx_whoosh.mp3" data-start="{start_time}" data-duration="0.8" data-volume="0.35" data-track-index="3"></audio>'
+                )
 
             # Generate Visual Scene HTML & GSAP Tweens based on Grammar
             scene_html, scene_tweens = self._render_grammar_scene(idx, s_order, start_time, duration, grammar, narration, scene)
@@ -485,7 +517,135 @@ class HyperFramesAdapter:
         prefix = f"s{scene_idx}"
         tweens: List[str] = []
 
-        if grammar == "tactical_map":
+        if grammar == "horror_bedroom_flashlight":
+            env = EnvironmentBuilder2D.render_environment("old_wooden_bedroom", f"{prefix}_env")
+            char = CharacterRig2D.render_character_svg(f"{prefix}_char", archetype="horror_investigator", pose="frightened_creep", expression="terrified", x=420, y=1250, scale=1.0)
+            html = f"""
+      <div id="{prefix}_view" class="clip scene-viewport" data-start="{start_time}" data-duration="{duration}" data-track-index="0">
+        <svg style="position: absolute; inset: 0; width: 100%; height: 100%;" viewBox="0 0 1080 1920">
+          {env["svg"]}
+          {char["svg"]}
+        </svg>
+      </div>"""
+            adapted = [t.replace("tl.", f"{prefix}_tl.") for t in env["tweens"] + char["tweens"]]
+            tweens.append(f"""
+      const {prefix}_tl = gsap.timeline();
+      {chr(10).join(adapted)}
+      {prefix}_tl.to("#{prefix}_view", {{ scale: 1.05, duration: {duration}, ease: "none" }}, 0.0);
+      tl.add({prefix}_tl, {start_time});
+""")
+
+        elif grammar == "horror_dark_corridor":
+            env = EnvironmentBuilder2D.render_environment("dark_corridor", f"{prefix}_env")
+            char = CharacterRig2D.render_character_svg(f"{prefix}_char", archetype="horror_investigator", pose="shock_recoil", expression="shocked", x=540, y=1300, scale=1.0)
+            html = f"""
+      <div id="{prefix}_view" class="clip scene-viewport" data-start="{start_time}" data-duration="{duration}" data-track-index="0">
+        <svg style="position: absolute; inset: 0; width: 100%; height: 100%;" viewBox="0 0 1080 1920">
+          {env["svg"]}
+          {char["svg"]}
+        </svg>
+      </div>"""
+            adapted = [t.replace("tl.", f"{prefix}_tl.") for t in env["tweens"] + char["tweens"]]
+            tweens.append(f"""
+      const {prefix}_tl = gsap.timeline();
+      {chr(10).join(adapted)}
+      {prefix}_tl.to("#{prefix}_view", {{ x: "+=6", y: "+=4", yoyo: true, repeat: 15, duration: 0.1, ease: "sine.inOut" }}, 0.0);
+      tl.add({prefix}_tl, {start_time});
+""")
+
+        elif grammar == "horror_shadow_encounter":
+            env = EnvironmentBuilder2D.render_environment("old_wooden_bedroom", f"{prefix}_env")
+            char_inv = CharacterRig2D.render_character_svg(f"{prefix}_inv", archetype="horror_investigator", pose="frightened_creep", expression="terrified", x=260, y=1350, scale=0.88)
+            char_shadow = CharacterRig2D.render_character_svg(f"{prefix}_shadow", archetype="shadow_entity", pose="observant_stand", expression="eerie", x=720, y=1050, scale=1.2)
+            html = f"""
+      <div id="{prefix}_view" class="clip scene-viewport" data-start="{start_time}" data-duration="{duration}" data-track-index="0">
+        <svg style="position: absolute; inset: 0; width: 100%; height: 100%;" viewBox="0 0 1080 1920">
+          {env["svg"]}
+          {char_shadow["svg"]}
+          {char_inv["svg"]}
+        </svg>
+      </div>"""
+            adapted = [t.replace("tl.", f"{prefix}_tl.") for t in env["tweens"] + char_shadow["tweens"] + char_inv["tweens"]]
+            tweens.append(f"""
+      const {prefix}_tl = gsap.timeline();
+      {chr(10).join(adapted)}
+      {prefix}_tl.to("#{prefix}_shadow_root", {{ scale: 1.15, transformOrigin: "bottom center", duration: {duration}, ease: "power1.inOut" }}, 0.0);
+      tl.add({prefix}_tl, {start_time});
+""")
+
+        elif grammar == "horror_shock_recoil":
+            env = EnvironmentBuilder2D.render_environment("dark_corridor", f"{prefix}_env")
+            char = CharacterRig2D.render_character_svg(f"{prefix}_char", archetype="horror_investigator", pose="shock_recoil", expression="shocked", x=540, y=1180, scale=1.35)
+            html = f"""
+      <div id="{prefix}_view" class="clip scene-viewport" data-start="{start_time}" data-duration="{duration}" data-track-index="0">
+        <svg style="position: absolute; inset: 0; width: 100%; height: 100%;" viewBox="0 0 1080 1920">
+          {env["svg"]}
+          {char["svg"]}
+        </svg>
+      </div>"""
+            adapted = [t.replace("tl.", f"{prefix}_tl.") for t in env["tweens"] + char["tweens"]]
+            tweens.append(f"""
+      const {prefix}_tl = gsap.timeline();
+      {chr(10).join(adapted)}
+      {prefix}_tl.fromTo("#{prefix}_char_root", {{ scale: 0.9 }}, {{ scale: 1.45, duration: 0.35, ease: "back.out(2)" }}, 0.1);
+      tl.add({prefix}_tl, {start_time});
+""")
+
+        elif grammar == "history_mountain_artillery":
+            env = EnvironmentBuilder2D.render_environment("mountain_battlefield", f"{prefix}_env")
+            char = CharacterRig2D.render_character_svg(f"{prefix}_char", archetype="artillery_soldier", pose="pulling_rope", expression="determined", x=480, y=1200, scale=1.0)
+            html = f"""
+      <div id="{prefix}_view" class="clip scene-viewport" data-start="{start_time}" data-duration="{duration}" data-track-index="0">
+        <svg style="position: absolute; inset: 0; width: 100%; height: 100%;" viewBox="0 0 1080 1920">
+          {env["svg"]}
+          {char["svg"]}
+        </svg>
+      </div>"""
+            adapted = [t.replace("tl.", f"{prefix}_tl.") for t in env["tweens"] + char["tweens"]]
+            tweens.append(f"""
+      const {prefix}_tl = gsap.timeline();
+      {chr(10).join(adapted)}
+      {prefix}_tl.to("#{prefix}_char_root", {{ x: "+=35", duration: {duration}, ease: "none" }}, 0.0);
+      tl.add({prefix}_tl, {start_time});
+""")
+
+        elif grammar == "history_command_bunker":
+            env = EnvironmentBuilder2D.render_environment("command_bunker", f"{prefix}_env")
+            char = CharacterRig2D.render_character_svg(f"{prefix}_char", archetype="military_commander", pose="commanding_point", expression="determined", x=380, y=1220, scale=1.0)
+            html = f"""
+      <div id="{prefix}_view" class="clip scene-viewport" data-start="{start_time}" data-duration="{duration}" data-track-index="0">
+        <svg style="position: absolute; inset: 0; width: 100%; height: 100%;" viewBox="0 0 1080 1920">
+          {env["svg"]}
+          {char["svg"]}
+        </svg>
+      </div>"""
+            adapted = [t.replace("tl.", f"{prefix}_tl.") for t in env["tweens"] + char["tweens"]]
+            tweens.append(f"""
+      const {prefix}_tl = gsap.timeline();
+      {chr(10).join(adapted)}
+      {prefix}_tl.to("#{prefix}_char_root", {{ scale: 1.05, duration: {duration}, ease: "power1.out" }}, 0.0);
+      tl.add({prefix}_tl, {start_time});
+""")
+
+        elif grammar == "history_victory_flag":
+            env = EnvironmentBuilder2D.render_environment("victory_roof", f"{prefix}_env")
+            char = CharacterRig2D.render_character_svg(f"{prefix}_char", archetype="military_commander", pose="commanding_point", expression="determined", x=320, y=1300, scale=0.92)
+            html = f"""
+      <div id="{prefix}_view" class="clip scene-viewport" data-start="{start_time}" data-duration="{duration}" data-track-index="0">
+        <svg style="position: absolute; inset: 0; width: 100%; height: 100%;" viewBox="0 0 1080 1920">
+          {env["svg"]}
+          {char["svg"]}
+        </svg>
+      </div>"""
+            adapted = [t.replace("tl.", f"{prefix}_tl.") for t in env["tweens"] + char["tweens"]]
+            tweens.append(f"""
+      const {prefix}_tl = gsap.timeline();
+      {chr(10).join(adapted)}
+      {prefix}_tl.fromTo("#{prefix}_view", {{ scale: 0.98, y: 30 }}, {{ scale: 1.04, y: -20, duration: {duration}, ease: "power2.out" }}, 0.0);
+      tl.add({prefix}_tl, {start_time});
+""")
+
+        elif grammar == "tactical_map":
             html = f"""
       <div id="{prefix}_view" class="clip scene-viewport" data-start="{start_time}" data-duration="{duration}" data-track-index="0">
         <div class="tactical-grid">

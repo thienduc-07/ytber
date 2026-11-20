@@ -17,9 +17,9 @@ from backend.routers.soundscape import router as soundscape_router
 from backend.routers.render import router as render_router
 
 # In-memory Rate Limiting (Token Bucket / Sliding Window per IP)
-# Free-tier rate limits: 60 requests per minute per client IP
+# Production rate limits: 1200 requests per minute per client IP to support rapid status polling & UI previews
 _RATE_LIMIT_BUCKET: Dict[str, list] = {}
-RATE_LIMIT_MAX_REQUESTS = 60
+RATE_LIMIT_MAX_REQUESTS = 1200
 RATE_LIMIT_WINDOW_SECONDS = 60
 
 class SecurityHeadersAndRateLimitMiddleware(BaseHTTPMiddleware):
@@ -28,8 +28,17 @@ class SecurityHeadersAndRateLimitMiddleware(BaseHTTPMiddleware):
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
         
-        # Starlette TestClient exemption to prevent test suite false-positive 429s
-        if client_ip == "testclient" or getattr(settings, "ENVIRONMENT", "") == "test":
+        # Starlette TestClient or local development loopback exemption
+        path = request.url.path
+        is_exempt = (
+            client_ip in ("testclient", "127.0.0.1", "localhost", "::1")
+            or getattr(settings, "ENVIRONMENT", "") in ("test", "development", "local")
+            or path.startswith("/healthz")
+            or path.startswith("/api/v1/render/status")
+            or path.startswith("/api/v1/tts/audio")
+            or path.startswith("/api/v1/assets/media")
+        )
+        if is_exempt:
             response = await call_next(request)
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
@@ -43,7 +52,7 @@ class SecurityHeadersAndRateLimitMiddleware(BaseHTTPMiddleware):
         history = _RATE_LIMIT_BUCKET.get(client_ip, [])
         history = [ts for ts in history if now - ts < RATE_LIMIT_WINDOW_SECONDS]
         
-        if len(history) >= RATE_LIMIT_MAX_REQUESTS and not request.url.path.startswith("/healthz"):
+        if len(history) >= RATE_LIMIT_MAX_REQUESTS:
             return Response(
                 content='{"detail": "Tần suất yêu cầu vượt quá giới hạn (Rate limit exceeded). Vui lòng thử lại sau giây lát."}',
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -59,8 +68,17 @@ class SecurityHeadersAndRateLimitMiddleware(BaseHTTPMiddleware):
         _RATE_LIMIT_BUCKET[client_ip] = history
         remaining = max(0, RATE_LIMIT_MAX_REQUESTS - len(history))
 
-        # 2. Process Request
-        response = await call_next(request)
+        # 2. Process Request with detailed error logging
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                content=f'{{"detail": "Lỗi máy chủ nội bộ: {str(exc)}"}}',
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                media_type="application/json"
+            )
 
         # 3. Attach Security & Rate Limit Headers
         response.headers["X-Content-Type-Options"] = "nosniff"

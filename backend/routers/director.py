@@ -164,7 +164,7 @@ async def generate_movie_zero_touch(
                             "cache_path": downloaded["file_path"]
                         })
                         visual_config["imageUrl"] = downloaded["local_url"]
-                        visual_method = "photo"
+                        visual_method = "toon" if req.visual_style == "2d_cartoon" else "photo"
                     except Exception as dl_err:
                         # Fallback to procedural animated style if download fails
                         visual_method = "toon"
@@ -183,7 +183,8 @@ async def generate_movie_zero_touch(
                 duration_sec=real_duration,
                 visual_description=bp_sc.get("visual_description", ""),
                 setting_name=bp_sc.get("environment_setting", ""),
-                character_action=bp_sc.get("sfx_cues", [{}])[0].get("sfx_type", "walk") if bp_sc.get("sfx_cues") else "walk"
+                character_action=bp_sc.get("sfx_cues", [{}])[0].get("sfx_type", "walk") if bp_sc.get("sfx_cues") else "walk",
+                genre=req.genre
             )
 
             # Combine soundscape SFX with blueprint cues

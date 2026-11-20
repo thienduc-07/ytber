@@ -128,20 +128,24 @@ async def synthesize_voice_endpoint(
 
         # 2. Persist audio ownership in database (link user to the generated/cached audio)
         filename = f"{result.audio_id}.mp3"
-        stmt = select(AudioFileModel).where(
-            AudioFileModel.filename == filename,
-            AudioFileModel.user_id == user_id
-        )
-        existing = (await db.execute(stmt)).scalar_one_or_none()
-        if not existing:
-            audio_rec = AudioFileModel(
-                id=str(uuid.uuid4()),
-                user_id=user_id,
-                filename=filename,
-                duration_seconds=result.duration_seconds
+        try:
+            stmt = select(AudioFileModel).where(
+                AudioFileModel.filename == filename,
+                AudioFileModel.user_id == user_id
             )
-            db.add(audio_rec)
-            await db.commit()
+            existing = (await db.execute(stmt)).scalar_one_or_none()
+            if not existing:
+                audio_rec = AudioFileModel(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    filename=filename,
+                    duration_seconds=result.duration_seconds
+                )
+                db.add(audio_rec)
+                await db.commit()
+        except Exception as db_err:
+            await db.rollback()
+            print(f"[TTS] Warning: Failed to record audio ownership in DB: {db_err}")
 
         # Attach playable auth query token so browser Audio elements & WebCodecs can stream directly
         auth_token = authorization.split(" ")[1] if authorization and " " in authorization else "demo-guest-token"

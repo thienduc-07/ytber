@@ -16,8 +16,8 @@ research_engine = AIResearchEngine()
 
 
 class TopicResearchRequest(BaseModel):
-    topic: str = Field(..., min_length=3, max_length=1000, description="Chủ đề hoặc ý tưởng kịch bản cần nghiên cứu")
-    category: Optional[str] = Field(default="general", description="historical_doc, economics, technology, science, environment, business, education")
+    topic: str = Field(..., min_length=1, max_length=2000, description="Chủ đề hoặc ý tưởng kịch bản cần nghiên cứu")
+    category: Optional[str] = Field(default="general", description="historical_doc, horror, crime, economics, technology, science, environment, business, education")
 
 
 @router.post("/topic", response_model=TopicResearchReport)
@@ -30,16 +30,22 @@ async def research_topic_endpoint(
     Extracts verified facts, reputable source citations, key entities with 2.5D visual directives,
     misconceptions, and high-retention narrative strategy.
     """
+    topic_clean = req.topic.strip()
+    if not topic_clean:
+        topic_clean = "Khám phá câu chuyện kỳ thú và bí ẩn"
     try:
         report = research_engine.analyze_and_research(
-            topic=req.topic,
+            topic=topic_clean,
             category_override=req.category
         )
         return report
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Research analysis failed: {str(e)}"
+        import traceback
+        traceback.print_exc()
+        # Fallback to general report if unexpected failure
+        return research_engine.analyze_and_research(
+            topic=topic_clean,
+            category_override="education"
         )
 
 

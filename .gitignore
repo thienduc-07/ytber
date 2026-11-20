@@ -32,6 +32,8 @@ env/
 data/audio/*.mp3
 data/audio/*.meta.json
 data/audio/*.tmp
+data/audio/sfx/*
+!data/audio/sfx/.gitkeep
 !data/audio/.gitkeep
 data/assets/*
 !data/assets/.gitkeep

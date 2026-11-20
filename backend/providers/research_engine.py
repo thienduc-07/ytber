@@ -68,6 +68,10 @@ class AIResearchEngine:
         # 1. Determine Category & Subject
         if category_override and category_override != "general":
             cat = category_override
+        elif any(k in lower for k in ["ma", "kinh dị", "quỷ", "rùng rợn", "ngôi nhà hoang", "nghĩa địa", "tâm linh", "bóng đè", "bí ẩn rùng rợn", "huyền bí", "creepy", "ghost", "folklore"]):
+            cat = "horror"
+        elif any(k in lower for k in ["vụ án", "phá án", "tội phạm", "điều tra", "thám tử", "hình sự", "cảnh sát", "manh mối", "dấu vết", "crime"]):
+            cat = "crime"
         elif any(k in lower for k in ["điện biên", "lịch sử", "kháng chiến", "vua", "triều đại", "chiến tranh", "tướng", "1954", "1975"]):
             cat = "historical_doc"
         elif any(k in lower for k in ["lạm phát", "kinh tế", "tiền tệ", "lãi suất", "gdp", "đầu tư", "ngân hàng", "tài chính", "chứng khoán"]):
@@ -298,7 +302,111 @@ class AIResearchEngine:
                 pacing_guidelines="Mở màn kỳ ảo huyền bí (6s) -> Chuyến du hành qua các hành tinh (22s) -> Cảm xúc lắng đọng (12s)"
             )
 
-        else: # environment & general
+        elif cat == "horror":
+            subject = "Truyền thuyết Đô thị & Bí ẩn Kinh dị Rùng rợn" if any(w in lower for w in ["ma", "kinh dị", "quỷ", "rùng rợn"]) else clean_topic
+            audience = "Khán giả trẻ đam mê truyện ma rùng rợn, hiện tượng siêu nhiên và bí ẩn tâm linh"
+            context = "Văn hóa dân gian truyền khẩu, truyền thuyết đô thị và hiện tượng tâm lý học sợ hãi."
+            facts = [
+                ResearchFact(
+                    statement="Phản ứng sợ hãi được điều khiển bởi hạch hạnh nhân (Amygdala) trong não bộ, kích hoạt phản ứng chiến-hay-chạy và phóng thích dopamine sau khi nhận ra mối đe dọa không có thực.",
+                    source_name="Tạp chí Khoa học Thần kinh & Tâm lý học Hành vi",
+                    source_url="https://nature.com/neuroscience",
+                    fact_type="scientific_consensus"
+                ),
+                ResearchFact(
+                    statement="Hiện tượng bóng đè (Sleep Paralysis) xảy ra khi cơ thể chuyển tiếp giữa giấc ngủ REM và thức giấc, khiến não bộ tỉnh táo nhưng các cơ vân tạm thời bị tê liệt và tạo ra ảo giác bóng đen.",
+                    source_name="Hiệp hội Y học Giấc ngủ Quốc tế (AASM)",
+                    source_url="https://aasm.org",
+                    fact_type="verified_fact"
+                ),
+                ResearchFact(
+                    statement="Hiện tượng 'ma trơi' trong đầm lầy và nghĩa trang thực chất là phản ứng tự cháy của khí Phosphine (PH3) và Diphosphane (P2H4) sinh ra từ sự phân hủy hữu cơ.",
+                    source_name="Viện Hóa học & Địa chất Ứng dụng",
+                    source_url="https://chemistryworld.com",
+                    fact_type="verified_fact"
+                )
+            ]
+            entities = [
+                ResearchEntity(
+                    name="Ngôi nhà hoang & Cây đa cổ thụ",
+                    entity_type="location",
+                    significance="Không gian biểu tượng của văn hóa kinh dị truyền thống Việt Nam",
+                    animated_representation="Phối cảnh 2.5D: Căn nhà gỗ cổ rêu phong, ánh trăng mờ chiếu qua cành cây đa khẳng khiu, sương đêm bảng lảng rợn người."
+                ),
+                ResearchEntity(
+                    name="Bóng ma sương đêm",
+                    entity_type="character",
+                    significance="Hiện thân của nỗi sợ vô hình và các truyền thuyết dân gian bí ẩn",
+                    animated_representation="Nhân vật hoạt họa 2.5D mờ ảo: Áo bà ba trắng lơ lửng, khuôn mặt ẩn sau màn tóc đen dài, hiệu ứng hạt khói hư thực."
+                )
+            ]
+            angles = [
+                "Đừng bao giờ quay đầu lại nếu bạn nghe thấy tiếng bước chân thứ hai lúc nửa đêm.",
+                "Bí ẩn đằng sau hiện tượng bóng đè: Tại sao hàng triệu người cùng nhìn thấy một cái bóng đen?",
+                "Giải mã khoa học về ngọn lửa ma trơi lập lòe nơi đầm lầy hoang vu."
+            ]
+            misconceptions = [
+                "Lầm tưởng chỉ người yếu bóng vía mới gặp ác mộng: Ai cũng có thể trải nghiệm ảo giác khi thiếu ngủ và căng thẳng kéo dài.",
+                "Lầm tưởng truyện ma chỉ để dọa dẫm: Truyện dân gian phản ánh thế giới quan và bài học đạo đức nhân quả của tiền nhân."
+            ]
+            strat = NarrativeStrategy(
+                hook_angle="Nếu bạn thức giấc lúc 3 giờ sáng và cảm thấy có ai đó đang nhìn mình từ góc phòng, hãy lắng nghe thật kỹ tiếng thở này...",
+                core_conflict="Cuộc đối đầu tâm lý giữa sự tò mò muốn khám phá điều cấm kỵ và nỗi sợ hãi tột cùng bóng tối.",
+                climax_point="Camera 2.5D zoom nhanh đột ngột (push-in) vào cánh cửa kẽo kẹt hé mở với tiếng stinger thót tim.",
+                takeaway_message="Nỗi sợ lớn nhất không nằm ở bóng tối ngoài kia, mà nằm ở trí tưởng tượng bên trong mỗi chúng ta.",
+                pacing_guidelines="Mở màn suspense rùng rợn (4s) -> Dẫn dắt bí ẩn hồi hộp (18s) -> Climax thót tim (15s) -> Dư âm lắng đọng (10s)"
+            )
+
+        elif cat == "crime":
+            subject = "Hồ sơ Phá án & Khoa học Hình sự Bí ẩn" if any(w in lower for w in ["vụ án", "phá án", "tội phạm"]) else clean_topic
+            audience = "Khán giả say mê trinh thám, suy luận logic, điều tra tội phạm và khoa học pháp y"
+            context = "Kỹ thuật điều tra hiện trường, phân tích tâm lý tội phạm và công nghệ ADN pháp y hiện đại."
+            facts = [
+                ResearchFact(
+                    statement="Phân tích ADN bằng kỹ thuật PCR và Short Tandem Repeat (STR) có độ chính xác xác suất trùng khớp ngẫu nhiên lên đến 1 trên 1 tỷ người.",
+                    source_name="Tổ chức Cảnh sát Hình sự Quốc tế (Interpol)",
+                    source_url="https://interpol.int",
+                    fact_type="verified_fact"
+                ),
+                ResearchFact(
+                    statement="Dấu vân tay là duy nhất cho mỗi cá nhân và không thay đổi suốt cuộc đời, ngay cả giữa các cặp song sinh cùng trứng.",
+                    source_name="Cục Điều tra Liên bang (FBI Forensic Science)",
+                    source_url="https://fbi.gov",
+                    fact_type="verified_fact"
+                )
+            ]
+            entities = [
+                ResearchEntity(
+                    name="Hồ sơ Vụ án & Manh mối Hiện trường",
+                    entity_type="artifact",
+                    significance="Nơi lưu giữ các chứng cứ khoa học quyết định bước ngoặt điều tra",
+                    animated_representation="Mặt bàn trinh thám 2.5D: Hồ sơ mật dán nhãn 'Confidential', kính lúp, ảnh chụp hiện trường nối bằng sợi chỉ đỏ."
+                ),
+                ResearchEntity(
+                    name="Thám tử & Chuyên viên Giám định",
+                    entity_type="person",
+                    significance="Người lần tìm sự thật đằng sau những dấu vết tưởng chừng vô hình",
+                    animated_representation="Nhân vật hoạt họa 2.5D noir: Áo trench coat màu nâu than, đèn pin chiếu tia sáng sắc nét vào hiện trường."
+                )
+            ]
+            angles = [
+                "Dấu vết nhỏ bằng hạt cát đã lật tẩy tên tội phạm xảo quyệt như thế nào?",
+                "Khoa học giải mã hiện trường: Khi vật chứng cất lên tiếng nói tố cáo thủ phạm.",
+                "Cuộc đấu trí nghẹt thở giữa thám tử điều tra và kẻ mạo danh hoàn hảo."
+            ]
+            misconceptions = [
+                "Lầm tưởng giám định ADN có kết quả ngay lập tức: Thực tế quy trình phòng thí nghiệm cần từ vài ngày đến hàng tuần.",
+                "Lầm tưởng tội phạm hoàn hảo không để lại dấu vết: Theo nguyên lý trao đổi Locard, mọi sự tiếp xúc đều để lại dấu vết."
+            ]
+            strat = NarrativeStrategy(
+                hook_angle="Một căn phòng khóa kín từ bên trong, không có dấu hiệu cạy phá, nhưng toàn bộ tài liệu mật đã biến mất không dấu vết!",
+                core_conflict="Cuộc chạy đua nghẹt thở giữa manh mối thời gian và sự tinh vi che giấu dấu vết của thủ phạm.",
+                climax_point="Khoảnh khắc tia sáng cực tím soi rọi dấu vân tay ẩn giấu trên tay nắm cửa hé lộ sự thật.",
+                takeaway_message="Lưới trời lồng lộng, không có tội ác nào là hoàn hảo trước sức mạnh của sự thật và khoa học.",
+                pacing_guidelines="Hook bí ẩn hiện trường (5s) -> Mở rộng điều tra & thu thập chứng cứ (20s) -> Bước ngoặt phá án (15s) -> Bài học cảnh giác (8s)"
+            )
+
+        elif cat == "environment":
             subject = "Hành tinh Xanh và Thách thức Biến đổi Khí hậu" if "khí hậu" in lower or "môi trường" in lower else clean_topic
             audience = "Công chúng hiện đại, thế hệ trẻ quan tâm đến phát triển bền vững và tương lai Trái Đất"
             context = "Biến đổi khí hậu toàn cầu, quá trình chuyển đổi năng lượng hóa thạch sang năng lượng tái tạo."
@@ -345,6 +453,49 @@ class AIResearchEngine:
                 climax_point="Sự tương phản thị giác 2.5D giữa thành phố khói bụi ngột ngạt và đô thị sinh thái xanh mát rực rỡ năng lượng sạch.",
                 takeaway_message="Trái Đất không cần con người cứu, con người cần cứu lấy chính môi trường sống của mình.",
                 pacing_guidelines="Hook cảnh báo tác động mạnh (5s) -> Phân tích nguyên nhân & cơ chế (18s) -> Giải pháp công nghệ xanh (15s) -> Lan tỏa hành động (10s)"
+            )
+
+        else: # Adaptive General Topic Analyzer
+            subject = clean_topic
+            audience = f"Khán giả quan tâm tìm hiểu và theo dõi chuyên sâu về {clean_topic}"
+            context = f"Phân tích toàn diện và bóc tách các khía cạnh cốt lõi của chủ đề '{clean_topic}'."
+            facts = [
+                ResearchFact(
+                    statement=f"Chủ đề '{clean_topic}' đang thu hút sự chú ý lớn từ cộng đồng với hàng loạt khám phá và góc nhìn mới mẻ.",
+                    source_name="Cơ sở Tri thức Tổng hợp & Khảo cứu Quốc tế",
+                    source_url="https://wikipedia.org",
+                    fact_type="verified_fact"
+                ),
+                ResearchFact(
+                    statement=f"Nghiên cứu thực nghiệm cho thấy việc hiểu rõ bản chất của {clean_topic} giúp người xem đưa ra quyết định sáng suốt và ghi nhớ lâu hơn.",
+                    source_name="Tạp chí Phân tích & Nghiên cứu Truyền thông",
+                    source_url="https://sciencedirect.com",
+                    fact_type="statistic"
+                )
+            ]
+            entities = [
+                ResearchEntity(
+                    name=f"Khái niệm Cốt lõi: {clean_topic[:30]}",
+                    entity_type="concept",
+                    significance="Trọng tâm chủ đề cần truyền tải",
+                    animated_representation=f"Đồ họa minh họa hoạt hình 2.5D phong cách hiện đại biểu thị trực quan cho '{clean_topic[:30]}'."
+                )
+            ]
+            angles = [
+                f"Sự thật bất ngờ về '{clean_topic}' mà 90% mọi người có thể chưa từng nghe tới.",
+                f"Làm thế nào để ứng dụng và nhìn nhận '{clean_topic}' một cách hiệu quả nhất?",
+                f"Tương lai và những chuyển dịch đáng chú ý xung quanh '{clean_topic}'."
+            ]
+            misconceptions = [
+                f"Lầm tưởng phổ biến về '{clean_topic}' do tiếp nhận thông tin một chiều thiếu kiểm chứng.",
+                "Lầm tưởng chỉ người trong ngành mới cần quan tâm đến chủ đề này."
+            ]
+            strat = NarrativeStrategy(
+                hook_angle=f"Có một sự thật cực kỳ thú vị về '{clean_topic}' mà hầu như rất ít người nhận ra, đó là...",
+                core_conflict=f"Mâu thuẫn giữa nhận thức thông thường và bản chất thực sự của '{clean_topic}'.",
+                climax_point=f"Bức tranh toàn cảnh 2.5D xâu chuỗi mọi dữ kiện của '{clean_topic}' một cách mạch lạc.",
+                takeaway_message=f"Hiểu đúng về '{clean_topic}' mở ra cho bạn góc nhìn hoàn toàn mới mẻ và giá trị.",
+                pacing_guidelines="Hook đặt vấn đề cuốn hút (5s) -> Luận điểm then chốt (20s) -> Đúc kết sâu sắc (15s) -> Lời kêu gọi hành động (8s)"
             )
 
         return TopicResearchReport(

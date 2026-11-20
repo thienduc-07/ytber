@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { SceneItem, SceneManifest, SceneAsset } from '../../types/database';
 import { apiClient } from '../../services/apiClient';
 import { 
-  Plus, Trash2, Image as ImageIcon, Search, Check, Clock, Layers, Volume2
+  Plus, Trash2, Image as ImageIcon, Search, Check, Clock, Layers, Volume2, Music
 } from 'lucide-react';
 
 interface StoryboardEditorProps {
@@ -22,6 +22,11 @@ const VISUAL_METHODS = [
 ];
 
 const SOUNDSCAPE_PRESETS = [
+  { id: 'horror_creepy', label: '👻 Kinh dị / Chuyện ma (Gió hú, tiếng bước chân kẽo kẹt, cửa hé, tiếng tim)' },
+  { id: 'crime_noir', label: '🕵️ Trinh thám / Phá án (Mưa đêm, máy chữ lạch cạch, chớp máy ảnh)' },
+  { id: 'comedy_cartoon', label: '🎭 Hài hước / Hoạt họa (Tiếng lò xo boing, còi trượt, bong bóng)' },
+  { id: 'epic_action', label: '⚡ Hành động / Trailer (Va đập chấn động, whoosh nhanh, dồn nhịp)' },
+  { id: 'lofi_chill', label: '🌸 Lofi / Thư giãn (Tiếng đĩa than, chuông gió, mưa nhẹ)' },
   { id: 'tropical_forest', label: '🌲 Rừng nhiệt đới (Ve sầu, gió tán lá, chim, bước chân lá)' },
   { id: 'mountain_battlefield', label: '⚔️ Chiến trường đèo núi (Gió hú, rền đại bác, bước chân bùn)' },
   { id: 'financial_floor', label: '📈 Thị trường tài chính (Chuông vàng, văn phòng giao dịch)' },
@@ -40,6 +45,43 @@ export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<SceneAsset[]>([]);
+
+  // SFX Search Modal State
+  const [sfxModalSceneIndex, setSfxModalSceneIndex] = useState<number | null>(null);
+  const [sfxSearchQuery, setSfxSearchQuery] = useState('');
+  const [sfxCategory, setSfxCategory] = useState<string>('');
+  const [isSearchingSFX, setIsSearchingSFX] = useState(false);
+  const [sfxResults, setSfxResults] = useState<any[]>([]);
+
+  const handleSearchSFX = async (q: string, cat?: string) => {
+    setIsSearchingSFX(true);
+    try {
+      const results = await apiClient.searchSFX(q, cat || undefined);
+      setSfxResults(results);
+    } catch (e) {
+      console.warn('Lỗi tìm kiếm SFX:', e);
+    } finally {
+      setIsSearchingSFX(false);
+    }
+  };
+
+  const handleAddSFXToScene = (sfx: any) => {
+    if (sfxModalSceneIndex === null) return;
+    const scene = manifest.scenes[sfxModalSceneIndex];
+    const existing = (scene as any).sound_design || [];
+    const newCue = {
+      sfx_id: sfx.id,
+      sfx_type: sfx.action_type || sfx.category,
+      description: sfx.name,
+      start_time_offset_ms: 300,
+      volume: sfx.volume || 0.5,
+      duck_narration: false,
+    };
+    handleUpdateScene(sfxModalSceneIndex, {
+      sound_design: [...existing, newCue],
+    } as any);
+    setSfxModalSceneIndex(null);
+  };
 
   const handleUpdateScene = (index: number, updates: Partial<SceneItem>) => {
     const updatedScenes = [...manifest.scenes];
@@ -270,6 +312,39 @@ export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
                     ))}
                   </select>
                 </div>
+
+                {/* Sound Effects (SFX) Badge List & Search */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-studio-border/50">
+                  <span className="text-[11px] text-gray-400 flex items-center gap-1">
+                    <Music className="w-3 h-3 text-studio-accent" />
+                    Hiệu ứng SFX:
+                  </span>
+                  {((scene as any).sound_design || []).map((sfx: any, sfxIdx: number) => (
+                    <span key={sfxIdx} className="text-[10px] bg-studio-bg border border-studio-border text-emerald-400 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      🎵 {sfx.description || sfx.sfx_id}
+                      <button
+                        onClick={() => {
+                          const updatedSfx = [...((scene as any).sound_design || [])];
+                          updatedSfx.splice(sfxIdx, 1);
+                          handleUpdateScene(idx, { sound_design: updatedSfx } as any);
+                        }}
+                        className="hover:text-red-400 text-gray-500 font-bold ml-0.5"
+                        title="Xóa hiệu ứng này"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setSfxModalSceneIndex(idx);
+                      handleSearchSFX('', '');
+                    }}
+                    className="text-[10px] bg-studio-primary/20 hover:bg-studio-primary/30 border border-studio-primary/40 text-studio-primary font-semibold px-2 py-0.5 rounded-md transition flex items-center gap-1"
+                  >
+                    + Thêm SFX
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -354,6 +429,113 @@ export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
                 <div className="col-span-2 flex flex-col items-center justify-center text-gray-500 py-10">
                   <ImageIcon className="w-8 h-8 mb-2 opacity-50" />
                   <p className="text-xs">Nhập từ khóa và bấm Tìm kiếm để khám phá kho tư liệu mở</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SFX Search & Discovery Modal */}
+      {sfxModalSceneIndex !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-studio-surface border border-studio-border rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col gap-4 max-h-[85vh]">
+            <div className="flex items-center justify-between border-b border-studio-border pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Music className="w-4 h-4 text-emerald-400" />
+                  Kho Hiệu Ứng Âm Thanh & SFX Môi Trường
+                </h3>
+                <p className="text-xs text-gray-400">Tự động tìm kiếm SFX ma quái, kinh dị, tiếng bước chân, cửa kẽo kẹt, whoosh, sấm sét</p>
+              </div>
+              <button
+                onClick={() => setSfxModalSceneIndex(null)}
+                className="text-gray-400 hover:text-white p-1 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Category Filter Chips */}
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { id: '', label: 'Tất cả' },
+                { id: 'horror', label: '👻 Kinh dị / Chuyện ma' },
+                { id: 'transition', label: '⚡ Whoosh chuyển cảnh' },
+                { id: 'crime', label: '🕵️ Phá án / Trinh thám' },
+                { id: 'weather', label: '⛈️ Thời tiết & Sấm sét' },
+                { id: 'comedy', label: '🎭 Hoạt họa / Hài hước' },
+                { id: 'historical', label: '⚔️ Lịch sử & Đại bác' },
+              ].map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    setSfxCategory(c.id);
+                    handleSearchSFX(sfxSearchQuery, c.id);
+                  }}
+                  className={`text-xs px-2.5 py-1 rounded-lg border transition ${
+                    sfxCategory === c.id
+                      ? 'bg-studio-primary border-studio-primary text-white font-semibold'
+                      : 'bg-studio-bg border-studio-border text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Search Bar */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={sfxSearchQuery}
+                onChange={(e) => setSfxSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearchSFX(sfxSearchQuery, sfxCategory)}
+                placeholder="Tìm tiếng ma, cửa kẽo kẹt, bước chân, sấm, tim, whoosh..."
+                className="flex-1 bg-studio-bg border border-studio-border rounded-xl px-3.5 py-2 text-sm text-gray-100 focus:outline-none focus:border-studio-primary"
+              />
+              <button
+                onClick={() => handleSearchSFX(sfxSearchQuery, sfxCategory)}
+                disabled={isSearchingSFX}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl flex items-center gap-1.5 transition"
+              >
+                <Search className="w-4 h-4" />
+                {isSearchingSFX ? 'Đang tìm...' : 'Tìm SFX'}
+              </button>
+            </div>
+
+            {/* SFX Results List */}
+            <div className="flex-1 overflow-y-auto flex flex-col gap-2 min-h-[260px] p-1">
+              {sfxResults.map((sfx) => (
+                <div
+                  key={sfx.id}
+                  className="bg-studio-bg border border-studio-border/70 rounded-xl p-3 flex items-center justify-between hover:border-emerald-500/50 transition group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-lg">
+                      {sfx.category === 'horror' ? '👻' : sfx.category === 'transition' ? '⚡' : sfx.category === 'crime' ? '🕵️' : '🎵'}
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white group-hover:text-emerald-300 transition">{sfx.name}</h4>
+                      <p className="text-[11px] text-gray-400">
+                        Thể loại: <span className="text-emerald-400">{sfx.category}</span> • Thời lượng: {((sfx.duration_ms || 1000) / 1000).toFixed(1)}s • Tags: {(sfx.tags || []).slice(0, 3).join(', ')}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleAddSFXToScene(sfx)}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg flex items-center gap-1 transition shadow"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Thêm vào cảnh
+                  </button>
+                </div>
+              ))}
+
+              {sfxResults.length === 0 && !isSearchingSFX && (
+                <div className="flex flex-col items-center justify-center text-gray-500 py-10">
+                  <Music className="w-8 h-8 mb-2 opacity-50" />
+                  <p className="text-xs">Không tìm thấy hiệu ứng phù hợp. Hãy thử tìm từ khóa khác!</p>
                 </div>
               )}
             </div>

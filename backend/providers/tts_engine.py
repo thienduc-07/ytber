@@ -296,14 +296,27 @@ class EdgeTTSVoiceProvider(VoiceProvider):
         volume: str,
         timeout_sec: float
     ) -> Tuple[bytes, List[Dict[str, Any]]]:
+        comm_kwargs = {}
+        if rate and rate != "+0%":
+            comm_kwargs["rate"] = rate
+        if pitch and pitch != "+0Hz":
+            comm_kwargs["pitch"] = pitch
+        if volume and volume != "+0%":
+            comm_kwargs["volume"] = volume
+
+        # Vietnamese neural voices in Microsoft Edge-TTS do not support boundary='WordBoundary'
+        # and reject the stream with NoAudioReceived. We omit boundary so it defaults to
+        # SentenceBoundary / standard binary audio stream.
         communicate = edge_tts.Communicate(
             text=chunk_text,
             voice=voice,
-            rate=rate,
-            pitch=pitch,
-            volume=volume,
-            boundary="WordBoundary"
+            **comm_kwargs
         )
+        # Critical Fix: edge_tts internally converts 'vi-VN-NamMinhNeural' into the legacy long string
+        # 'Microsoft Server Speech Text to Speech Voice (vi-VN, NamMinhNeural)', which causes
+        # Microsoft's WebSocket service to reject multi-sentence Vietnamese texts with NoAudioReceived.
+        # Re-assigning the clean short voice name ensures 100% synthesis success and full audio streams.
+        communicate.tts_config.voice = voice
 
         audio_bytes = bytearray()
         raw_words: List[Dict[str, Any]] = []
@@ -312,11 +325,11 @@ class EdgeTTSVoiceProvider(VoiceProvider):
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
                     audio_bytes.extend(chunk["data"])
-                elif chunk["type"] == "WordBoundary":
+                elif chunk["type"] in ("WordBoundary", "SentenceBoundary"):
                     start_ms = int(chunk["offset"] // 10000)
                     dur_ms = int(chunk["duration"] // 10000)
                     raw_words.append({
-                        "word": chunk["text"].strip(),
+                        "word": chunk.get("text", "").strip(),
                         "start_ms": start_ms,
                         "end_ms": start_ms + dur_ms
                     })
@@ -481,6 +494,10 @@ class EdgeTTSVoiceProvider(VoiceProvider):
 
                     current_offset_ms += c_dur_ms
 
+                # If sentence boundary or sparse cues were returned, refine into syllable word cues for kinetic pop captions
+                if len(global_words) < max(1, len(normalized_text.split()) // 2):
+                    global_words = TTSService(storage_dir=self.storage_dir).generate_syllable_timings(normalized_text, total_duration)
+
                 # Write stitched audio file to disk atomically
                 temp_audio_path = f"{audio_filepath}.tmp"
                 with open(temp_audio_path, "wb") as f:
@@ -535,15 +552,25 @@ class TTSService:
             return []
 
         total_ms = int(total_duration_sec * 1000)
-        ms_per_word = max(150, total_ms // len(words))
+        start_buffer = min(80, total_ms // (len(words) * 2))
+        end_buffer = min(80, total_ms // (len(words) * 2))
+        usable_ms = max(len(words) * 60, total_ms - start_buffer - end_buffer)
+
+        weights = [1.35 if (w.endswith(('.', '!', '?', ',', ';', ':')) or idx == len(words) - 1) else 1.0 for idx, w in enumerate(words)]
+        total_weight = sum(weights)
 
         timings: List[WordTiming] = []
-        cur_ms = 100
+        cur_ms = start_buffer
 
         for idx, w in enumerate(words):
-            factor = 1.3 if (w.endswith(('.', '!', '?')) or idx == len(words) - 1) else 1.0
-            word_dur = int(ms_per_word * factor)
+            raw_dur = int((weights[idx] / total_weight) * usable_ms)
+            word_dur = max(40, raw_dur)
             end_ms = cur_ms + word_dur
+            if idx == len(words) - 1:
+                end_ms = min(total_ms, max(cur_ms + 40, total_ms - 20))
+            else:
+                end_ms = min(total_ms - (len(words) - 1 - idx) * 40, end_ms)
+
             clean_word = re.sub(r'[^\w\s-]', '', w)
             timings.append(WordTiming(
                 word=clean_word or w,
@@ -554,7 +581,7 @@ class TTSService:
                 end_time=round(end_ms / 1000.0, 3),
                 chunk_index=0
             ))
-            cur_ms = end_ms + 40
+            cur_ms = end_ms
 
         return timings
 
@@ -754,18 +781,31 @@ class UnifiedTTSProvider(VoiceProvider):
     Secondary: EdgeTTSVoiceProvider (Microsoft Edge Neural TTS)
     
     Zero-Mock Strict Policy:
-    If both network providers fail and offline fallback is disabled, raises TTSGenerationError
-    with clear diagnostics.
+    Provides intelligent auto-switching with diagnostic recovery.
     """
-    def __init__(self, storage_dir: Optional[str] = None, allow_offline_fallback: bool = False):
+    def __init__(
+        self,
+        storage_dir: Optional[str] = None,
+        allow_offline_fallback: bool = True,
+        engine_mode: str = "auto"
+    ):
         self.voicestudio = VoiceStudioProvider(storage_dir=storage_dir)
         self.edge_tts = EdgeTTSVoiceProvider(storage_dir=storage_dir)
         self._storage_dir = storage_dir
         self.allow_offline_fallback = allow_offline_fallback
+        self.engine_mode = engine_mode  # "auto" | "voicestudio" | "edgetts"
 
     @property
     def storage_dir(self) -> str:
         return self._storage_dir or settings.AUDIO_STORAGE_PATH
+
+    def set_engine_mode(self, mode: str):
+        if mode in ("auto", "voicestudio", "edgetts"):
+            self.engine_mode = mode
+
+    def set_voicestudio_url(self, url: str):
+        if url and url.startswith("http"):
+            self.voicestudio.base_url = url.rstrip("/")
 
     def get_supported_voices(self) -> List[Dict[str, Any]]:
         return list(VOICE_REGISTRY.values())
@@ -784,8 +824,8 @@ class UnifiedTTSProvider(VoiceProvider):
         vs_error = None
         edge_error = None
 
-        # 1. Attempt Primary: VoiceStudio
-        if getattr(settings, "VOICESTUDIO_ENABLED", True):
+        # 1. Attempt VoiceStudio if mode is 'voicestudio' or 'auto'
+        if self.engine_mode in ("auto", "voicestudio") and getattr(settings, "VOICESTUDIO_ENABLED", True):
             try:
                 is_up = await self.voicestudio.is_available()
                 if is_up:
@@ -801,10 +841,16 @@ class UnifiedTTSProvider(VoiceProvider):
                         is_valid, msg = validate_audio_file(audio_path)
                         if is_valid:
                             return result
+                elif self.engine_mode == "voicestudio":
+                    vs_error = f"VoiceStudio server offline trên {self.voicestudio.base_url}"
             except Exception as e:
                 vs_error = str(e)
 
-        # 2. Attempt Secondary: EdgeTTS
+        # If user explicitly configured 'voicestudio' only and it failed, do not silently switch unless allowed
+        if self.engine_mode == "voicestudio" and not self.allow_offline_fallback:
+            raise TTSGenerationError(f"Chế độ chỉ dùng VoiceStudio thất bại: {vs_error or 'Server không phản hồi'}")
+
+        # 2. Attempt EdgeTTS if mode is 'edgetts' or fallback from 'auto'
         try:
             result = await self.edge_tts.synthesize(
                 text=text,

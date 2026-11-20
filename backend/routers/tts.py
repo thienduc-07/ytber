@@ -23,7 +23,55 @@ from backend.providers.tts_engine import (
 )
 
 router = APIRouter(prefix="/api/v1/tts", tags=["Voice Studio & Speech Synthesis"])
-voice_provider = UnifiedTTSProvider()
+voice_provider = UnifiedTTSProvider(allow_offline_fallback=True)
+
+class TTSSettingsRequest(BaseModel):
+    voicestudio_url: Optional[str] = None
+    engine_mode: Optional[str] = None  # "auto", "voicestudio", "edgetts"
+    voicestudio_enabled: Optional[bool] = None
+    allow_offline_fallback: Optional[bool] = None
+
+@router.get("/settings")
+async def get_tts_settings():
+    """Returns current TTS configuration, VoiceStudio live connectivity, and available engines."""
+    vs_online = await voice_provider.voicestudio.is_available()
+    return {
+        "voicestudio_url": voice_provider.voicestudio.base_url,
+        "voicestudio_enabled": getattr(settings, "VOICESTUDIO_ENABLED", True),
+        "voicestudio_online": vs_online,
+        "engine_mode": voice_provider.engine_mode,
+        "allow_offline_fallback": voice_provider.allow_offline_fallback,
+        "supported_voices": voice_provider.get_supported_voices()
+    }
+
+@router.post("/settings")
+async def update_tts_settings(req: TTSSettingsRequest):
+    """Dynamically updates VoiceStudio URL and TTS engine routing."""
+    if req.voicestudio_url:
+        voice_provider.set_voicestudio_url(req.voicestudio_url)
+    if req.engine_mode:
+        voice_provider.set_engine_mode(req.engine_mode)
+    if req.allow_offline_fallback is not None:
+        voice_provider.allow_offline_fallback = req.allow_offline_fallback
+    vs_online = await voice_provider.voicestudio.is_available()
+    return {
+        "status": "success",
+        "voicestudio_url": voice_provider.voicestudio.base_url,
+        "voicestudio_online": vs_online,
+        "engine_mode": voice_provider.engine_mode,
+        "allow_offline_fallback": voice_provider.allow_offline_fallback
+    }
+
+@router.get("/voicestudio/status")
+async def check_voicestudio_status():
+    """Checks live ping to local VoiceStudio instance (debpalash/VoiceStudio)."""
+    is_up = await voice_provider.voicestudio.is_available()
+    return {
+        "online": is_up,
+        "url": voice_provider.voicestudio.base_url,
+        "engine": "debpalash/VoiceStudio",
+        "install_command": "git clone https://github.com/debpalash/VoiceStudio.git && cd VoiceStudio && python -m voicestudio --port 3900"
+    }
 
 class TTSRequest(BaseModel):
     text: str = Field(..., min_length=2, max_length=30000, description="Văn bản lồng tiếng tiếng Việt (hỗ trợ tối đa 30.000 ký tự)")

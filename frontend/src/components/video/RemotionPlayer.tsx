@@ -60,27 +60,91 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
         isSpeaking
       );
 
-      // 2. Render Synchronized Subtitle Overlay
-      const subY = Math.round(h * 0.78);
-      const subH = Math.min(180, Math.round(h * 0.16));
-      const cardW = Math.round(w * 0.88);
-      const cardX = Math.round((w - cardW) / 2);
+      // 2. Render Ricks Clips 3000 Kinetic Pop Subtitles (Word-by-word bouncing karaoke)
+      const text = activeScene.narration_text?.trim() || '';
+      if (text) {
+        const words = text.split(/\s+/).filter(Boolean);
+        if (words.length > 0) {
+          // Calculate active word index from millisecond boundary cues
+          const cues = activeScene.subtitles_json || [];
+          const localMs = Math.round(localT * activeScene.duration_seconds * 1000);
+          let activeIdx = -1;
+          if (cues.length > 0) {
+            activeIdx = cues.findIndex((c: any) => localMs >= (c.start_ms || 0) && localMs <= (c.end_ms || 0));
+            if (activeIdx === -1) {
+              for (let i = cues.length - 1; i >= 0; i--) {
+                if (localMs >= (cues[i].start_ms || 0)) {
+                  activeIdx = i;
+                  break;
+                }
+              }
+            }
+          }
+          if (activeIdx === -1) {
+            activeIdx = Math.min(words.length - 1, Math.floor(localT * words.length));
+          }
 
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(10, 8, 16, 0.85)';
-      ctx.roundRect(cardX, subY - subH / 2, cardW, subH, 24);
-      ctx.fill();
-      ctx.strokeStyle = '#2A2238';
-      ctx.lineWidth = 3;
-      ctx.stroke();
+          // Chunk words into rapid 3-4 word phrases centered on screen
+          const wordsPerChunk = 4;
+          const chunkStart = Math.floor(activeIdx / wordsPerChunk) * wordsPerChunk;
+          const currentChunk = words.slice(chunkStart, chunkStart + wordsPerChunk);
+          const relActive = activeIdx - chunkStart;
 
-      ctx.fillStyle = '#FFDF00';
-      ctx.font = 'bold 36px "Be Vietnam Pro", sans-serif';
-      const displayText = activeScene.narration_text.length > 55
-        ? activeScene.narration_text.slice(0, 55) + '...'
-        : activeScene.narration_text;
-      ctx.fillText(displayText, w / 2, subY);
+          // Position: Eye-level upper-middle for viral short-form retention
+          const subY = Math.round(h * 0.54);
+          const fontSize = Math.round(Math.min(w, h) * 0.058);
+
+          ctx.save();
+          ctx.font = `900 ${fontSize}px "Montserrat", "Impact", "Arial Black", sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+
+          const spaceW = ctx.measureText(' ').width;
+          const widths = currentChunk.map(wd => ctx.measureText(wd.toUpperCase()).width);
+          const totalW = widths.reduce((a, b) => a + b, 0) + (currentChunk.length - 1) * spaceW;
+
+          let curX = (w - totalW) / 2;
+
+          for (let idx = 0; idx < currentChunk.length; idx++) {
+            const wd = currentChunk[idx].toUpperCase();
+            const isAct = idx === relActive;
+            const wordW = widths[idx];
+
+            ctx.save();
+            if (isAct) {
+              // Ricks Clips Signature Kinetic Pop bounce (scale 1.15x)
+              const cx = curX + wordW / 2;
+              const cy = subY;
+              ctx.translate(cx, cy);
+              ctx.scale(1.15, 1.15);
+              ctx.translate(-cx, -cy);
+
+              ctx.shadowColor = '#FACC15';
+              ctx.shadowBlur = 18;
+            } else {
+              ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+              ctx.shadowBlur = 12;
+              ctx.shadowOffsetX = 0;
+              ctx.shadowOffsetY = 4;
+            }
+
+            // Heavy Solid Black Outline Stroke
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = Math.round(fontSize * 0.22);
+            ctx.lineJoin = 'round';
+            ctx.miterLimit = 2;
+            ctx.strokeText(wd, curX, subY);
+
+            // Active word highlighted in bright yellow (#FACC15), inactive in white (#FFFFFF)
+            ctx.fillStyle = isAct ? '#FACC15' : '#FFFFFF';
+            ctx.fillText(wd, curX, subY);
+            ctx.restore();
+
+            curX += wordW + spaceW;
+          }
+          ctx.restore();
+        }
+      }
     }
   }, [localTime, manifest, isPlaying]);
 

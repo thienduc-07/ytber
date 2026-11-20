@@ -42,6 +42,14 @@ class AIDirectorEngine:
         "hiệp định", "chiến thắng", "quân sự", "đờ cát", "de castries", "pháo binh", "việt minh",
         "thế chiến", "triều đại", "vua", "trận đánh", "cách mạng", "hào hùng", "dân tộc"
     ]
+    HORROR_TRIGGERS = [
+        "ma", "kinh dị", "quỷ", "rùng rợn", "ngôi nhà hoang", "nghĩa địa", "tâm linh",
+        "bóng đè", "bí ẩn rùng rợn", "huyền bí", "creepy", "ghost", "eerie", "oan hồn", "rợn tóc gáy"
+    ]
+    CRIME_TRIGGERS = [
+        "vụ án", "phá án", "tội phạm", "điều tra", "thám tử", "hình sự", "cảnh sát",
+        "manh mối", "dấu vết", "nghi phạm", "hiện trường", "truy lùng"
+    ]
     ECONOMIC_TRIGGERS = [
         "lạm phát", "kinh tế", "gdp", "lãi suất", "ngân hàng", "thị trường", "tài chính",
         "đầu tư", "fdi", "giá dầu", "cung ứng", "tiền tệ", "chứng khoán", "tăng trưởng",
@@ -72,6 +80,8 @@ class AIDirectorEngine:
 
         # Score category matches
         scores = {
+            "horror": sum(1 for k in self.HORROR_TRIGGERS if k in text_lower),
+            "crime": sum(1 for k in self.CRIME_TRIGGERS if k in text_lower),
             "historical_doc": sum(1 for k in self.HISTORICAL_TRIGGERS if k in text_lower),
             "economics": sum(1 for k in self.ECONOMIC_TRIGGERS if k in text_lower),
             "technology": sum(1 for k in self.TECH_TRIGGERS if k in text_lower),
@@ -90,7 +100,21 @@ class AIDirectorEngine:
         words = first_sentence.split()
         subject_phrase = " ".join(words[:6]) if len(words) >= 6 else first_sentence
 
-        if best_cat == "historical_doc":
+        if best_cat == "horror":
+            era = "Bí ẩn Dân gian & Truyền thuyết Rùng rợn Đêm khuya"
+            tone = "Rùng rợn, u ám, hồi hộp nghẹt thở và thót tim"
+            audience = "Khán giả trẻ say mê truyện ma, bí ẩn tâm linh và phim kinh dị ngắn"
+            structure = "Điềm báo bí ẩn (Hook) -> Dấn thân cấm địa -> Hiện tượng kỳ dị dồn dập -> Climax thót tim -> Lời cảnh báo lạnh gáy"
+            music_theme = "horror_eerie_drone_piano"
+            palette = ["#0A0612", "#1C0D2E", "#4B1248", "#8B0000", "#F4E4BA"]
+        elif best_cat == "crime":
+            era = "Hồ sơ Trinh thám & Hiện trường Vụ án Hình sự"
+            tone = "Bí ẩn, kịch tính, suy luận sắc bén và nghẹt thở"
+            audience = "Khán giả đam mê trinh thám, phá án và tâm lý tội phạm"
+            structure = "Hiện trường bí ẩn -> Thu thập manh mối -> Đấu trí căng thẳng -> Lật mở thủ phạm"
+            music_theme = "noir_jazz_investigation"
+            palette = ["#0F1115", "#1E232B", "#3A4454", "#D97706", "#F3F4F6"]
+        elif best_cat == "historical_doc":
             era = "Chiến tranh Đông Dương / Thế kỷ 20" if any(w in text_lower for w in ["điện biên", "1954", "pháp", "kháng chiến"]) else "Bối cảnh Lịch sử Hào hùng"
             tone = "Hào hùng, trang trọng, kịch tính và tôn vinh lòng quả cảm"
             audience = "Khán giả đại chúng yêu thích lịch sử và phim tài liệu"
@@ -414,6 +438,50 @@ class AIDirectorEngine:
                 SoundDesignCue(sfx_id="sfx_space_01", sfx_type="drone", description="Tiếng ngân vang trầm ấm của không gian vũ trụ", start_time_offset_ms=0, volume=0.4)
             ]
 
+        elif cat == "horror":
+            env = EnvironmentSpec(
+                setting_name="Ngôi nhà hoang cổ kính & Cây đa bóng trăng khuya",
+                environment_type="outdoor_nature",
+                time_of_day="night_moonlight",
+                weather_particles="fog",
+                primary_colors=semantics.suggested_palette
+            )
+            vis_desc = f"Không gian kinh dị rùng rợn: Ánh trăng lu mờ chiếu qua cành cây khô khẳng khiu, sương đêm bao phủ ngôi nhà hoang cổ kính, bóng người mờ ảo thoáng hiện."
+            char_actions = ["stand_wonder", "creep_walk"]
+            props = ["ngọn đèn dầu lay lắt", "cánh cửa gỗ mục nát", "màn sương lạnh"]
+            camera_angle = "dutch_angle" if scene_idx % 2 == 0 else "eye_level"
+            camera_mov = "fast_push_in" if scene_idx == 1 else "tracking"
+            anim_instr = AnimationDirective(character_action="walk", object_action="fog_drift", parallax_enabled=True, motion_intensity=0.85)
+            lighting = "eerie_moonlight_and_flickering_candle"
+            vis_method = "toon"
+            music_dir = "horror_eerie_drone_piano"
+            sfx_cues = [
+                SoundDesignCue(sfx_id="sfx_whoosh_swipe", sfx_type="whoosh", description="Whoosh chuyển cảnh rùng rợn", start_time_offset_ms=0, volume=0.45),
+                SoundDesignCue(sfx_id="sfx_creaking_floor", sfx_type="impact", description="Tiếng sàn gỗ kẽo kẹt rợn người", start_time_offset_ms=300, volume=0.50)
+            ]
+
+        elif cat == "crime":
+            env = EnvironmentSpec(
+                setting_name="Hiện trường vụ án mạng & Phòng trinh thám Noir",
+                environment_type="interior_lab",
+                time_of_day="night_moonlight",
+                weather_particles="rain",
+                primary_colors=semantics.suggested_palette
+            )
+            vis_desc = f"Bối cảnh trinh thám hình sự: Dải băng phong tỏa hiện trường vàng rực dưới ánh đèn đường, thám tử lần tìm dấu vết bên cạnh tập hồ sơ mật nối bằng chỉ đỏ."
+            char_actions = ["examine_clues", "present_data"]
+            props = ["kính lúp điều tra", "dải băng hiện trường cảnh sát", "hồ sơ mật"]
+            camera_angle = "low_angle_hero" if scene_idx == 1 else "eye_level"
+            camera_mov = "slow_push_in"
+            anim_instr = AnimationDirective(character_action="point_gesture", object_action="rain_fall", parallax_enabled=True, motion_intensity=0.75)
+            lighting = "noir_dramatic_shadows_and_streetlamp"
+            vis_method = "infographic"
+            music_dir = "noir_jazz_investigation"
+            sfx_cues = [
+                SoundDesignCue(sfx_id="sfx_whoosh_swipe", sfx_type="whoosh", description="Whoosh chuyển cảnh nhanh", start_time_offset_ms=0, volume=0.45),
+                SoundDesignCue(sfx_id="sfx_camera_shutter", sfx_type="mechanical", description="Tiếng chụp ảnh hiện trường chớp flash", start_time_offset_ms=400, volume=0.40)
+            ]
+
         else:
             env = EnvironmentSpec(
                 setting_name="Không gian Đô thị Xanh Bền vững",
@@ -437,10 +505,15 @@ class AIDirectorEngine:
 
         # Calculate Duration from Vietnamese syllables
         # 1 Vietnamese syllable ~ 3.6 syllables per second
+        # Ricks Clips Pacing: Rapid cuts targeting 1.8s - 3.5s per scene
         words = sentence.split()
         syllable_count = len(words)
         rate = genre_prof.syllables_per_second if genre_prof else 3.8
-        duration = max(genre_prof.min_scene_sec if genre_prof else 3.5, round(syllable_count / rate, 1))
+        duration = max(1.8, min(4.5, round(syllable_count / rate, 1)))
+
+        # Ricks Clips Dynamic Camera Rotation on every cut
+        CAM_ROTATION = ["fast_push_in", "dolly_out", "pan_left", "pan_right", "tracking", "dynamic_zoom"]
+        camera_mov = CAM_ROTATION[(scene_idx - 1) % len(CAM_ROTATION)]
 
         # Assign concrete animated search keywords (FOR VECTOR/ILLUSTRATION ONLY)
         kw_domain = f"{cat} animated vector illustration"
@@ -511,29 +584,32 @@ class AIDirectorEngine:
         # 2. Consistent Character Registry
         characters = self.build_character_registry(matched_genre, clean_text)
 
-        # 3. Sentence Splitting & Boundaries
-        raw_sentences = [s.strip() for s in re.split(r'[.!?\n]+', clean_text) if len(s.strip()) > 8]
-        if not raw_sentences:
-            raw_sentences = [clean_text]
+        # 3. Ricks Clips 3000 Viral Pacing Algorithm: Rapid cuts every 1.8s - 3.2s
+        # Deconstruct narrative into granular, dynamic visual beats for maximum retention (15-25+ scenes per short)
+        initial_sentences = [s.strip() for s in re.split(r'[.!?\n]+', clean_text) if len(s.strip()) > 3]
+        if not initial_sentences:
+            initial_sentences = [clean_text]
 
-        # Combine very short sentences if needed to maintain optimal scene pacing
-        scenes_text = []
-        cur_buf = []
-        for s in raw_sentences:
-            cur_buf.append(s)
-            combined = " ".join(cur_buf)
-            if len(combined.split()) >= 12 or len(scenes_text) >= 5:
-                scenes_text.append(combined)
-                cur_buf = []
-        if cur_buf:
-            if scenes_text:
-                scenes_text[-1] += " " + " ".join(cur_buf)
+        rapid_beats = []
+        for sent in initial_sentences:
+            words = sent.split()
+            # If short sentence (under 10 words), it forms 1 punchy scene
+            if len(words) <= 10:
+                rapid_beats.append(sent)
             else:
-                scenes_text.append(" ".join(cur_buf))
+                # Split along clause markers (commas, semicolons, colons, dashes)
+                clauses = [c.strip() for c in re.split(r'[,;:\u2014]+', sent) if len(c.strip().split()) >= 3]
+                if len(clauses) >= 2:
+                    rapid_beats.extend(clauses)
+                else:
+                    # Split in half to maintain 1.8s - 3.2s rapid visual cut rhythm
+                    mid = len(words) // 2
+                    rapid_beats.append(" ".join(words[:mid]))
+                    rapid_beats.append(" ".join(words[mid:]))
 
-        # Enforce minimum 3 scenes and maximum 8 scenes for shorts
-        if len(scenes_text) < 3 and len(raw_sentences) >= 3:
-            scenes_text = raw_sentences[:6]
+        scenes_text = [b for b in rapid_beats if len(b.split()) >= 2]
+        if not scenes_text:
+            scenes_text = initial_sentences
 
         # 4. Direct Scenes
         scenes: List[ScenePlan] = []

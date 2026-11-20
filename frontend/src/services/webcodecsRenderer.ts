@@ -593,55 +593,63 @@ export class WebCodecsRenderer {
       activeWordIndex = Math.min(words.length - 1, Math.floor(t * words.length));
     }
 
-    // Dynamic vertical positioning based on aspect ratio
-    const y = Math.round(h * 0.78);
-    const subH = Math.min(180, Math.round(h * 0.16));
-    const cardW = Math.round(w * 0.88);
-    const cardX = Math.round((w - cardW) / 2);
-
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Bounding subtitle card backdrop
-    ctx.fillStyle = 'rgba(10, 8, 16, 0.85)';
-    ctx.roundRect(cardX, y - subH / 2, cardW, subH, 24);
-    ctx.fill();
-    ctx.strokeStyle = '#2A2238';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    // Group text into phrases of 4 to 6 words for clear readability
-    const wordsPerChunk = w > h ? 6 : 4;
+    // Position: Eye-level upper-middle for viral short-form retention (Y at 54% of height)
+    const y = Math.round(h * 0.54);
+    const wordsPerChunk = 4;
     const chunkStart = Math.floor(activeWordIndex / wordsPerChunk) * wordsPerChunk;
     const currentChunk = words.slice(chunkStart, chunkStart + wordsPerChunk);
     const relativeActive = activeWordIndex - chunkStart;
 
-    const fontSize = Math.round(Math.min(w, h) * 0.046);
-    ctx.font = `bold ${fontSize}px "Be Vietnam Pro", sans-serif`;
+    const fontSize = Math.round(Math.min(w, h) * 0.058);
+    ctx.save();
+    ctx.font = `900 ${fontSize}px "Montserrat", "Impact", "Arial Black", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
 
-    // Measure and render words with active karaoke word highlight
+    // Measure and render words with Ricks Clips kinetic pop highlight
     const spaceWidth = ctx.measureText(' ').width;
-    const wordWidths = currentChunk.map((wd) => ctx.measureText(wd).width);
+    const wordWidths = currentChunk.map((wd) => ctx.measureText(wd.toUpperCase()).width);
     const totalChunkWidth = wordWidths.reduce((a, b) => a + b, 0) + (currentChunk.length - 1) * spaceWidth;
 
     let startX = (w - totalChunkWidth) / 2;
 
-    ctx.textAlign = 'left';
     for (let idx = 0; idx < currentChunk.length; idx++) {
-      const wd = currentChunk[idx];
+      const wd = currentChunk[idx].toUpperCase();
       const isWordActive = idx === relativeActive;
+      const wordW = wordWidths[idx];
 
-      // Dark stroke outline
-      ctx.strokeStyle = '#050308';
-      ctx.lineWidth = 8;
+      ctx.save();
+      if (isWordActive) {
+        // Ricks Clips Signature Kinetic Pop bounce (scale 1.15x)
+        const cx = startX + wordW / 2;
+        const cy = y;
+        ctx.translate(cx, cy);
+        ctx.scale(1.15, 1.15);
+        ctx.translate(-cx, -cy);
+
+        ctx.shadowColor = '#FACC15';
+        ctx.shadowBlur = 18;
+      } else {
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+        ctx.shadowBlur = 12;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 4;
+      }
+
+      // Heavy Black Outline Stroke
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = Math.round(fontSize * 0.22);
       ctx.lineJoin = 'round';
+      ctx.miterLimit = 2;
       ctx.strokeText(wd, startX, y);
 
-      // Active word highlighted in bright yellow (#FFDF00), others in white (#FFFFFF)
-      ctx.fillStyle = isWordActive ? '#FFDF00' : '#FFFFFF';
+      // Active word highlighted in bright yellow (#FACC15), inactive in white (#FFFFFF)
+      ctx.fillStyle = isWordActive ? '#FACC15' : '#FFFFFF';
       ctx.fillText(wd, startX, y);
+      ctx.restore();
 
-      startX += wordWidths[idx] + spaceWidth;
+      startX += wordW + spaceWidth;
     }
+    ctx.restore();
   }
 }

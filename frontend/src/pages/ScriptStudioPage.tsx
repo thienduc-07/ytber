@@ -34,6 +34,51 @@ export const ScriptStudioPage: React.FC = () => {
   const [showRenderModal, setShowRenderModal] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // VoiceStudio Settings Modal State
+  const [showVoiceStudioModal, setShowVoiceStudioModal] = useState(false);
+  const [voiceStudioUrl, setVoiceStudioUrl] = useState('http://127.0.0.1:3900');
+  const [engineMode, setEngineMode] = useState<'auto' | 'voicestudio' | 'edgetts'>('auto');
+  const [voiceStudioOnline, setVoiceStudioOnline] = useState<boolean | null>(null);
+  const [isCheckingVS, setIsCheckingVS] = useState(false);
+
+  useEffect(() => {
+    apiClient.fetchTTSSettings().then(res => {
+      if (res.voicestudio_url) setVoiceStudioUrl(res.voicestudio_url);
+      if (res.engine_mode) setEngineMode(res.engine_mode);
+      setVoiceStudioOnline(res.voicestudio_online);
+    }).catch(err => console.warn('Could not load TTS settings:', err));
+  }, []);
+
+  const handleCheckVoiceStudio = async () => {
+    setIsCheckingVS(true);
+    try {
+      const res = await apiClient.checkVoiceStudioStatus();
+      setVoiceStudioOnline(res.online);
+      setNotice(res.online ? '🟢 VoiceStudio đang hoạt động trực tuyến!' : '🟡 VoiceStudio chưa mở (hệ thống tự động dùng Edge-TTS)');
+    } catch (e: any) {
+      setVoiceStudioOnline(false);
+      setNotice('🟡 Không thể kết nối VoiceStudio (dùng Edge-TTS tự động)');
+    } finally {
+      setIsCheckingVS(false);
+      setTimeout(() => setNotice(null), 3500);
+    }
+  };
+
+  const handleSaveVoiceStudioSettings = async () => {
+    try {
+      await apiClient.updateTTSSettings({
+        voicestudio_url: voiceStudioUrl,
+        engine_mode: engineMode,
+      });
+      setNotice('Đã lưu cấu hình VoiceStudio thành công!');
+      setShowVoiceStudioModal(false);
+    } catch (e: any) {
+      setNotice(`Lỗi lưu cấu hình: ${e.message}`);
+    } finally {
+      setTimeout(() => setNotice(null), 3000);
+    }
+  };
+
   // Research State
   const [topicQuery, setTopicQuery] = useState('Chiến thắng Điện Biên Phủ 1954');
   const [isResearching, setIsResearching] = useState(false);
@@ -526,6 +571,16 @@ export const ScriptStudioPage: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setShowVoiceStudioModal(true)}
+            className="flex items-center gap-1.5 bg-studio-card hover:bg-studio-border text-emerald-300 text-xs font-semibold px-3 py-2 rounded-xl transition border border-emerald-500/30 shadow-sm"
+            title="Cấu hình VoiceStudio & Lồng tiếng AI"
+          >
+            <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+            <span>⚙️ VoiceStudio</span>
+            <span className={`w-2 h-2 rounded-full ${voiceStudioOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+          </button>
+
+          <button
             onClick={handleSaveProject}
             disabled={isSaving}
             className="flex items-center gap-1.5 bg-studio-card hover:bg-studio-border text-gray-200 text-xs font-semibold px-3.5 py-2 rounded-xl transition border border-studio-border"
@@ -863,6 +918,141 @@ export const ScriptStudioPage: React.FC = () => {
         isOpen={showRenderModal}
         onClose={() => setShowRenderModal(false)}
       />
+
+      {/* VoiceStudio & TTS Configuration Modal */}
+      {showVoiceStudioModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-studio-surface border border-studio-border rounded-2xl max-w-xl w-full p-6 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-studio-border pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Sliders className="w-5 h-5 text-emerald-400" />
+                  Cấu Hình VoiceStudio & Công Cụ Lồng Tiếng AI
+                </h3>
+                <p className="text-xs text-gray-400">Tích hợp thông minh bộ máy lồng tiếng nơ-ron miễn phí (debpalash/VoiceStudio)</p>
+              </div>
+              <button
+                onClick={() => setShowVoiceStudioModal(false)}
+                className="text-gray-400 hover:text-white p-1 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Live Connection Status Badge */}
+            <div className={`p-3.5 rounded-xl border flex items-center justify-between ${
+              voiceStudioOnline
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <span className={`w-3 h-3 rounded-full animate-pulse ${voiceStudioOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                <div>
+                  <h4 className="text-xs font-bold">
+                    {voiceStudioOnline ? 'VoiceStudio Đang Hoạt Động Trực Tuyến (Port 3900)' : 'VoiceStudio Chưa Chạy Cục Bộ'}
+                  </h4>
+                  <p className="text-[11px] opacity-80">
+                    {voiceStudioOnline
+                      ? 'Hệ thống đang ưu tiên tổng hợp giọng đọc nơ-ron qua VoiceStudio cục bộ.'
+                      : 'Hệ thống đang tự động chuyển tiếp mượt mà sang Microsoft Edge Neural TTS ($0).'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleCheckVoiceStudio}
+                disabled={isCheckingVS}
+                className="px-3 py-1.5 bg-studio-bg hover:bg-studio-border border border-studio-border rounded-lg text-xs font-semibold text-white transition flex-shrink-0"
+              >
+                {isCheckingVS ? 'Đang ping...' : 'Kiểm tra ping'}
+              </button>
+            </div>
+
+            {/* Engine Selection Mode */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-gray-200">Chế độ ưu tiên bộ máy tạo giọng (Engine Routing):</label>
+              <div className="grid grid-cols-1 gap-2">
+                {[
+                  {
+                    id: 'auto',
+                    title: '🚀 Tự động thông minh (Khuyên dùng)',
+                    desc: 'Ưu tiên VoiceStudio cục bộ nếu đang bật; tự động chuyển sang Edge-TTS nếu VoiceStudio tắt.'
+                  },
+                  {
+                    id: 'voicestudio',
+                    title: '🎙️ Chỉ VoiceStudio (debpalash/VoiceStudio)',
+                    desc: 'Bắt buộc chạy trên server VoiceStudio nội bộ trên máy bạn.'
+                  },
+                  {
+                    id: 'edgetts',
+                    title: '🌐 Trực tiếp Edge-TTS (Không cần cài thêm gì)',
+                    desc: 'Sử dụng trực tiếp giọng đọc nơ-ron Nam Minh / Hoài My tốc độ cao.'
+                  }
+                ].map(mode => (
+                  <label
+                    key={mode.id}
+                    onClick={() => setEngineMode(mode.id as any)}
+                    className={`p-3 rounded-xl border cursor-pointer transition flex items-start gap-3 ${
+                      engineMode === mode.id
+                        ? 'bg-studio-primary/10 border-studio-primary text-white'
+                        : 'bg-studio-bg border-studio-border text-gray-300 hover:border-gray-600'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="engine_mode"
+                      checked={engineMode === mode.id}
+                      onChange={() => setEngineMode(mode.id as any)}
+                      className="mt-1"
+                    />
+                    <div>
+                      <h5 className="text-xs font-bold text-white">{mode.title}</h5>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{mode.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* VoiceStudio Endpoint URL */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-gray-200">Địa chỉ VoiceStudio Server (HTTP Endpoint):</label>
+              <input
+                type="text"
+                value={voiceStudioUrl}
+                onChange={(e) => setVoiceStudioUrl(e.target.value)}
+                placeholder="http://127.0.0.1:3900"
+                className="bg-studio-bg border border-studio-border rounded-xl px-3.5 py-2 text-xs font-mono text-emerald-300 focus:outline-none focus:border-studio-primary"
+              />
+            </div>
+
+            {/* Step-by-Step Launch Guide */}
+            <div className="bg-studio-bg border border-studio-border rounded-xl p-3 flex flex-col gap-2">
+              <span className="text-[11px] font-bold text-gray-300 flex items-center gap-1.5">
+                📖 Lệnh khởi chạy debpalash/VoiceStudio (nếu muốn chạy cục bộ):
+              </span>
+              <pre className="bg-black/50 p-2.5 rounded-lg text-[10px] font-mono text-amber-300 overflow-x-auto border border-studio-border/50">
+git clone https://github.com/debpalash/VoiceStudio.git && cd VoiceStudio && python -m voicestudio --port 3900
+              </pre>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-studio-border">
+              <button
+                onClick={() => setShowVoiceStudioModal(false)}
+                className="px-4 py-2 bg-studio-card hover:bg-studio-border text-gray-300 text-xs font-semibold rounded-xl transition"
+              >
+                Đóng
+              </button>
+              <button
+                onClick={handleSaveVoiceStudioSettings}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow"
+              >
+                Lưu Cấu Hình
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

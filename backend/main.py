@@ -13,6 +13,7 @@ from backend.routers.tts import router as tts_router
 from backend.routers.projects import router as projects_router, episode_manifest_router
 from backend.routers.research import router as research_router
 from backend.routers.director import router as director_router
+from backend.routers.soundscape import router as soundscape_router
 
 # In-memory Rate Limiting (Token Bucket / Sliding Window per IP)
 # Free-tier rate limits: 60 requests per minute per client IP
@@ -112,6 +113,7 @@ app.include_router(projects_router)
 app.include_router(episode_manifest_router)
 app.include_router(research_router)
 app.include_router(director_router)
+app.include_router(soundscape_router)
 
 @app.get("/healthz", tags=["Health & Diagnostics"])
 async def health_check():

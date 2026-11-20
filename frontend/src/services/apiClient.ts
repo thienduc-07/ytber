@@ -416,4 +416,53 @@ export const apiClient = {
     }
     return await res.json();
   },
+
+  // 7. Soundscape Presets & SFX Search Engine
+  async fetchSoundscapePresets(): Promise<any[]> {
+    try {
+      const res = await fetch(`${API_BASE}/soundscape/presets`);
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('Could not fetch soundscape presets:', e);
+    }
+    return [];
+  },
+
+  async searchSFX(query: string = '', category?: string): Promise<any[]> {
+    const url = new URL(`${API_BASE}/soundscape/search`, window.location.origin);
+    if (query) url.searchParams.set('q', query);
+    if (category) url.searchParams.set('category', category);
+    const res = await fetch(url.toString().replace(window.location.origin, ''));
+    if (!res.ok) throw new Error(`Tìm kiếm âm thanh thất bại (${res.status})`);
+    return await res.json();
+  },
+
+  // 8. VoiceStudio Integration & TTS Configuration
+  async fetchTTSSettings(): Promise<any> {
+    const res = await fetch(`${API_BASE}/tts/settings`);
+    if (!res.ok) throw new Error(`Lấy cấu hình TTS thất bại (${res.status})`);
+    return await res.json();
+  },
+
+  async updateTTSSettings(params: {
+    voicestudio_url?: string;
+    engine_mode?: string;
+    voicestudio_enabled?: boolean;
+    allow_offline_fallback?: boolean;
+  }): Promise<any> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/tts/settings`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) throw new Error(`Cập nhật cấu hình TTS thất bại (${res.status})`);
+    return await res.json();
+  },
+
+  async checkVoiceStudioStatus(): Promise<any> {
+    const res = await fetch(`${API_BASE}/tts/voicestudio/status`);
+    if (!res.ok) throw new Error(`Kiểm tra VoiceStudio thất bại (${res.status})`);
+    return await res.json();
+  },
 };

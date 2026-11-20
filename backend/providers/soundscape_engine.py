@@ -66,8 +66,107 @@ class AISoundscapeDirector:
         music_theme = "thematic_cinematic"
         primary_env = "generic_ambient"
 
+        # 0. Horror & Creepy Story / Chuyện ma rùng rợn & Tâm linh
+        if any(w in desc_lower for w in ["ma", "kinh dị", "quỷ", "rùng rợn", "nhà hoang", "nghĩa địa", "tâm linh", "bóng đè", "huyền bí", "creepy", "ghost", "eerie"]):
+            primary_env = "horror_creepy"
+            music_theme = "horror_eerie_drone_piano"
+            ambient_layers = [
+                SoundscapeLayer(
+                    layer_id="amb_eerie_wind",
+                    name="Tiếng gió rít qua khe cửa hoang lạnh",
+                    category="weather",
+                    description="Gió hú rít từng cơn qua khe cửa sổ gỗ mục nát",
+                    volume=0.35,
+                    loop=True,
+                    frequency_range_hz="150-2200"
+                ),
+                SoundscapeLayer(
+                    layer_id="amb_ghostly_whispers",
+                    name="Tiếng thì thầm ma quái hư ảo",
+                    category="room_tone",
+                    description="Âm hưởng thì thầm chập chờn xa xăm tạo cảm giác rợn tóc gáy",
+                    volume=0.25,
+                    loop=True,
+                    frequency_range_hz="800-4500"
+                ),
+                SoundscapeLayer(
+                    layer_id="amb_dark_drone_sub",
+                    name="Tần số hạ âm u ám rùng mình",
+                    category="sub_bass",
+                    description="Sub-bass u uất trầm đặc gây cảm giác hồi hộp tức ngực",
+                    volume=0.30,
+                    loop=True,
+                    frequency_range_hz="35-180"
+                )
+            ]
+            action_sfx = [
+                ActionSFXEvent(
+                    event_id="sfx_creaking_floor",
+                    action_type="footsteps_wood",
+                    description="Tiếng bước chân kẽo kẹt trên sàn gỗ mục",
+                    timestamp_offset_ms=400,
+                    duration_ms=350,
+                    volume=0.55,
+                    sync_trigger="character_walk_step"
+                ),
+                ActionSFXEvent(
+                    event_id="sfx_creaking_door",
+                    action_type="door_creak",
+                    description="Cánh cửa gỗ mục từ từ hé mở kẽo kẹt rợn người",
+                    timestamp_offset_ms=int(duration_sec * 350),
+                    duration_ms=650,
+                    volume=0.50,
+                    sync_trigger="camera_pan"
+                ),
+                ActionSFXEvent(
+                    event_id="sfx_heartbeat_pulse",
+                    action_type="heartbeat",
+                    description="Tiếng tim đập thình thịch căng thẳng hồi hộp",
+                    timestamp_offset_ms=int(duration_sec * 700),
+                    duration_ms=800,
+                    volume=0.60,
+                    sync_trigger="camera_pan"
+                )
+            ]
+
+        # 0.5. Mystery & Noir Crime / Điều tra phá án
+        elif any(w in desc_lower for w in ["vụ án", "phá án", "tội phạm", "điều tra", "thám tử", "hình sự", "cảnh sát", "manh mối", "dấu vết"]):
+            primary_env = "crime_noir"
+            music_theme = "noir_jazz_investigation"
+            ambient_layers = [
+                SoundscapeLayer(
+                    layer_id="amb_noir_rain",
+                    name="Mưa đêm rả rích trên mặt đường",
+                    category="weather",
+                    description="Âm hưởng mưa đêm cô độc rơi trên mái hiên và mặt đường nhựa",
+                    volume=0.30,
+                    loop=True,
+                    frequency_range_hz="300-4000"
+                )
+            ]
+            action_sfx = [
+                ActionSFXEvent(
+                    event_id="sfx_typewriter",
+                    action_type="typewriter",
+                    description="Tiếng gõ phím máy chữ lạch cạch ghi chép hồ sơ",
+                    timestamp_offset_ms=300,
+                    duration_ms=450,
+                    volume=0.45,
+                    sync_trigger="camera_pan"
+                ),
+                ActionSFXEvent(
+                    event_id="sfx_camera_shutter",
+                    action_type="camera_shutter",
+                    description="Tiếng chớp màn trập máy ảnh lưu lại hiện trường",
+                    timestamp_offset_ms=int(duration_sec * 500),
+                    duration_ms=300,
+                    volume=0.40,
+                    sync_trigger="camera_pan"
+                )
+            ]
+
         # 1. Tropical Forest / Jungle Environment
-        if any(w in desc_lower for w in ["rừng", "forest", "cây", "lá", "tropical", "cỏ", "thiên nhiên", "đồi"]):
+        elif any(w in desc_lower for w in ["rừng", "forest", "cây", "lá", "tropical", "cỏ", "thiên nhiên", "đồi"]):
             primary_env = "tropical_forest"
             music_theme = "nature_acoustic_strings"
             ambient_layers = [
@@ -355,3 +454,114 @@ class AISoundscapeDirector:
 
         enriched_manifest["scenes"] = updated_scenes
         return enriched_manifest
+
+    @classmethod
+    def get_soundscape_presets(cls) -> List[Dict[str, Any]]:
+        return [
+            {
+                "id": "horror_creepy",
+                "name": "👻 Kinh dị / Chuyện ma (Gió hú, tiếng bước chân kẽo kẹt, cửa hé, tiếng tim)",
+                "music_theme": "horror_eerie_drone_piano",
+                "default_sfx": ["sfx_creaking_floor", "sfx_creaking_door", "sfx_heartbeat_pulse", "sfx_jumpscare_stinger"]
+            },
+            {
+                "id": "crime_noir",
+                "name": "🕵️ Trinh thám / Phá án (Mưa đêm, máy chữ lạch cạch, chớp máy ảnh)",
+                "music_theme": "noir_jazz_investigation",
+                "default_sfx": ["sfx_typewriter", "sfx_camera_shutter"]
+            },
+            {
+                "id": "tropical_forest",
+                "name": "🌲 Rừng nhiệt đới (Ve sầu, gió tán lá, chim, bước chân lá)",
+                "music_theme": "nature_acoustic_strings",
+                "default_sfx": ["sfx_step_01", "sfx_foliage_01"]
+            },
+            {
+                "id": "mountain_battlefield",
+                "name": "⚔️ Chiến trường đèo núi (Gió hú, rền đại bác, bước chân bùn)",
+                "music_theme": "heroic_orchestral_brass",
+                "default_sfx": ["sfx_cannon_distant", "sfx_march_01"]
+            },
+            {
+                "id": "financial_floor",
+                "name": "📈 Thị trường tài chính (Chuông vàng, văn phòng giao dịch)",
+                "music_theme": "rhythmic_minimal_marimba",
+                "default_sfx": ["sfx_coin_chime", "sfx_chart_rise"]
+            },
+            {
+                "id": "cyber_tech_lab",
+                "name": "💻 Phòng công nghệ (Server hum, data stream whoosh)",
+                "music_theme": "synthwave_ambient_arpeggio",
+                "default_sfx": ["sfx_data_stream"]
+            },
+            {
+                "id": "deep_space",
+                "name": "🚀 Vũ trụ / Thiên văn (Sub-bass, cosmic wash)",
+                "music_theme": "ethereal_cosmic_pad",
+                "default_sfx": ["sfx_orbit_whoosh"]
+            },
+            {
+                "id": "green_wind_farm",
+                "name": "🍃 Đồng cỏ sinh thái (Gió turbine, thiên nhiên xanh)",
+                "music_theme": "uplifting_acoustic_warm",
+                "default_sfx": ["sfx_turbine_whoosh"]
+            }
+        ]
+
+    @classmethod
+    def search_sfx(cls, query: str = "", category: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Smart Search Engine for environmental sound effects, transitions, and musical stingers.
+        Matches keywords in name, category, or tags.
+        """
+        sfx_catalog = [
+            # Horror & Suspense
+            {"id": "sfx_creaking_floor", "name": "Tiếng sàn gỗ kẽo kẹt rợn người", "category": "horror", "tags": ["ma", "gỗ", "bước chân", "kẽo kẹt", "creak", "floor"], "action_type": "footsteps_wood", "duration_ms": 1500, "volume": 0.55},
+            {"id": "sfx_creaking_door", "name": "Tiếng cửa gỗ mục từ từ hé mở", "category": "horror", "tags": ["cửa", "ma", "rùng rợn", "door", "creak"], "action_type": "door_creak", "duration_ms": 2000, "volume": 0.50},
+            {"id": "sfx_jumpscare_stinger", "name": "Hiệu ứng Jumpscare thót tim", "category": "horror", "tags": ["jumpscare", "giật mình", "thót tim", "stinger", "horror"], "action_type": "jumpscare_stinger", "duration_ms": 1200, "volume": 0.65},
+            {"id": "sfx_heartbeat_pulse", "name": "Nhịp tim đập dồn dập hồi hộp", "category": "horror", "tags": ["tim", "đập", "hồi hộp", "heartbeat"], "action_type": "heartbeat", "duration_ms": 2500, "volume": 0.60},
+            {"id": "sfx_distant_crow", "name": "Tiếng quạ kêu đêm khuya hoang vắng", "category": "horror", "tags": ["quạ", "chim", "đêm", "crow"], "action_type": "bird_chirp", "duration_ms": 1800, "volume": 0.40},
+            {"id": "sfx_ghostly_whisper", "name": "Tiếng thì thầm ma quái hư thực", "category": "horror", "tags": ["thì thầm", "ma", "whisper", "ghost"], "action_type": "ghostly_whisper", "duration_ms": 2200, "volume": 0.45},
+            {"id": "sfx_thunder_crack", "name": "Sấm sét rạch trời kinh hoàng", "category": "weather", "tags": ["sấm", "sét", "mưa", "thunder", "storm"], "action_type": "cannon_boom", "duration_ms": 3000, "volume": 0.60},
+
+            # Viral Cinematic & Cuts (Ricks Clips style)
+            {"id": "sfx_whoosh_swipe", "name": "Whoosh chuyển cảnh chớp nhoáng (Viral Cut)", "category": "transition", "tags": ["whoosh", "chuyển cảnh", "swipe", "cut", "fast"], "action_type": "whoosh_pan", "duration_ms": 400, "volume": 0.50},
+            {"id": "sfx_heavy_impact", "name": "Cú va đập chấn động (Bass Drop Hit)", "category": "impact", "tags": ["hit", "impact", "bass", "va đập", "boom"], "action_type": "cannon_boom", "duration_ms": 1000, "volume": 0.65},
+            {"id": "sfx_glitch_riser", "name": "Hiệu ứng Riser dồn nhịp căng thẳng", "category": "transition", "tags": ["riser", "glitch", "dồn dập", "căng thẳng"], "action_type": "whoosh_pan", "duration_ms": 1500, "volume": 0.45},
+
+            # Mystery & Crime
+            {"id": "sfx_typewriter", "name": "Tiếng gõ máy chữ lạch cạch hồ sơ", "category": "crime", "tags": ["máy chữ", "phá án", "typewriter", "hồ sơ"], "action_type": "typewriter", "duration_ms": 1200, "volume": 0.45},
+            {"id": "sfx_camera_shutter", "name": "Tiếng bấm máy ảnh hiện trường", "category": "crime", "tags": ["máy ảnh", "camera", "chụp hình", "shutter"], "action_type": "camera_shutter", "duration_ms": 600, "volume": 0.40},
+
+            # Historical & War
+            {"id": "sfx_cannon_distant", "name": "Tiếng trọng pháo dội vách núi", "category": "historical", "tags": ["đại bác", "pháo", "súng", "chiến tranh", "cannon"], "action_type": "cannon_boom", "duration_ms": 2200, "volume": 0.55},
+            {"id": "sfx_march_01", "name": "Bước chân quân hành rập ràng sỏi đá", "category": "historical", "tags": ["quân hành", "hành quân", "bước chân", "march"], "action_type": "footsteps_soil", "duration_ms": 1800, "volume": 0.50},
+
+            # Finance & Tech
+            {"id": "sfx_coin_chime", "name": "Tiếng đồng xu vàng leng keng", "category": "finance", "tags": ["tiền", "xu", "vàng", "coin", "chime"], "action_type": "coin_chime", "duration_ms": 800, "volume": 0.40},
+            {"id": "sfx_data_stream", "name": "Luồng dữ liệu số quét qua mạng nơ-ron", "category": "tech", "tags": ["data", "công nghệ", "ai", "stream"], "action_type": "whoosh_pan", "duration_ms": 600, "volume": 0.45},
+
+            # Cartoon & Comedy
+            {"id": "sfx_cartoon_boing", "name": "Tiếng lò xo nảy tưng tưng", "category": "comedy", "tags": ["boing", "hài", "lò xo", "cartoon"], "action_type": "coin_chime", "duration_ms": 700, "volume": 0.50},
+            {"id": "sfx_slide_whistle", "name": "Tiếng còi trượt vui nhộn", "category": "comedy", "tags": ["còi", "trượt", "whistle", "funny"], "action_type": "whoosh_pan", "duration_ms": 1000, "volume": 0.45},
+            {"id": "sfx_pop_bubble", "name": "Tiếng bong bóng nổ bốp", "category": "comedy", "tags": ["pop", "bong bóng", "bubble"], "action_type": "coin_chime", "duration_ms": 350, "volume": 0.40}
+        ]
+
+        q = (query or "").strip().lower()
+        if not q and not category:
+            return sfx_catalog
+
+        results = []
+        for item in sfx_catalog:
+            if category and item["category"] != category:
+                continue
+            if not q:
+                results.append(item)
+                continue
+            matches_name = q in item["name"].lower()
+            matches_cat = q in item["category"].lower()
+            matches_tags = any(q in t.lower() for t in item["tags"])
+            if matches_name or matches_cat or matches_tags:
+                results.append(item)
+
+        return results

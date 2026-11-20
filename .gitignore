@@ -35,6 +35,8 @@ data/audio/*.tmp
 !data/audio/.gitkeep
 data/assets/*
 !data/assets/.gitkeep
+data/renders/**
+!data/renders/.gitkeep
 
 # Remotion temporary bundles
 remotion-webpack-bundle-*

@@ -319,7 +319,7 @@ export const ScriptStudioPage: React.FC = () => {
   const handleZeroTouchGenerateMovie = async () => {
     if (!scriptText.trim()) return;
     setIsGeneratingMovie(true);
-    setNotice('🎬 Zero-Touch AI Studio: Đang đạo diễn kịch bản, tạo giọng AI, ghép tư liệu & hòa âm 4 Bus...');
+    setNotice('🎬 Zero-Touch AI Studio: Đang đạo diễn kịch bản, tạo giọng AI & phối âm...');
 
     try {
       const generatedManifest = await apiClient.generateMovie({
@@ -332,7 +332,10 @@ export const ScriptStudioPage: React.FC = () => {
 
       setManifest(generatedManifest);
       setActiveSceneIndex(0);
-      setNotice(`🎬 Tạo phim tự động thành công! Đã đồng bộ ${generatedManifest.scenes.length} cảnh (~${Math.round(generatedManifest.total_duration_sec)}s) với giọng đọc AI, tư liệu thực & âm thanh 4-Bus.`);
+      setNotice(`🎬 Đạo diễn thành công ${generatedManifest.scenes.length} cảnh! Đang chuyển tiếp sang động cơ kết xuất HyperFrames...`);
+      
+      // Automatically trigger HyperFrames rendering modal
+      setShowRenderModal(true);
     } catch (err: any) {
       console.error('Error generating movie:', err);
       setNotice(`Lỗi tạo phim tự động: ${err?.message || 'Vui lòng thử lại'}`);
@@ -591,10 +594,10 @@ export const ScriptStudioPage: React.FC = () => {
 
           <button
             onClick={() => setShowRenderModal(true)}
-            className="flex items-center gap-2 bg-gradient-to-r from-studio-primary to-indigo-600 hover:from-indigo-500 hover:to-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg transition hover:scale-105"
+            className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg transition hover:scale-105 border border-emerald-400/40"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Kết Xuất MP4 (WebCodecs)</span>
+            <span>Kết Xuất MP4 (HyperFrames)</span>
           </button>
         </div>
       </header>
@@ -902,10 +905,10 @@ export const ScriptStudioPage: React.FC = () => {
             <div className="w-full mt-4 flex flex-col gap-2">
               <button
                 onClick={() => setShowRenderModal(true)}
-                className="w-full py-2.5 bg-studio-primary hover:bg-indigo-600 text-white font-bold rounded-xl shadow text-xs flex items-center justify-center gap-1.5 transition"
+                className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow text-xs flex items-center justify-center gap-1.5 transition"
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
-                Kết Xuất Video MP4 ({manifest.aspect_ratio})
+                Kết Xuất Video MP4 (HyperFrames Engine)
               </button>
             </div>
           </div>

@@ -1,84 +1,98 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { SceneManifest } from '../../types/database';
-import { WebCodecsRenderer, type RenderProgressEvent, type RenderResult } from '../../services/webcodecsRenderer';
-import { checkWebCodecsSupport, type WebCodecsSupportResult } from '../../services/webcodecs';
-import { X, Play, Download, AlertTriangle, CheckCircle2, Film, FileText } from 'lucide-react';
+import { apiClient } from '../../services/apiClient';
+import { X, Download, CheckCircle2, Film, FileText, Sparkles, Loader2 } from 'lucide-react';
 
 interface RenderModalProps {
   manifest: SceneManifest;
   isOpen: boolean;
   onClose: () => void;
+  autoStart?: boolean;
 }
 
-export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onClose }) => {
-  const [support, setSupport] = useState<WebCodecsSupportResult | null>(null);
+export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onClose, autoStart = false }) => {
   const [isRendering, setIsRendering] = useState(false);
-  const [progress, setProgress] = useState<RenderProgressEvent | null>(null);
-  const [result, setResult] = useState<RenderResult | null>(null);
+  const [currentStage, setCurrentStage] = useState<string>('Sẵn sàng kết xuất video');
+  const [progressPercent, setProgressPercent] = useState<number>(0);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [videoMetadata, setVideoMetadata] = useState<{ duration?: number; size?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
 
-  const rendererRef = useRef<WebCodecsRenderer | null>(null);
+  const pollIntervalRef = useRef<any>(null);
 
   useEffect(() => {
     if (isOpen) {
-      checkWebCodecsSupport().then((res) => {
-        setSupport(res);
-      });
-    } else {
-      // Cleanup preview url when closed
-      if (videoUrl) {
-        URL.revokeObjectURL(videoUrl);
-        setVideoUrl(null);
+      if (autoStart && !isRendering && !videoUrl) {
+        handleStartHyperFramesRender();
       }
-      setResult(null);
-      setProgress(null);
+    } else {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
       setIsRendering(false);
+      setProgressPercent(0);
       setError(null);
     }
-  }, [isOpen]);
+  }, [isOpen, autoStart]);
 
-  if (!isOpen) return null;
-
-  const handleStartRender = async () => {
+  const handleStartHyperFramesRender = async () => {
     setError(null);
     setIsRendering(true);
-    setProgress({
-      percent: 0,
-      currentFrame: 0,
-      totalFrames: Math.round(manifest.total_duration_sec * (manifest.video_specs.fps || 30)),
-      effectiveFps: 0,
-      estimatedRemainingSec: 0,
-      statusText: 'Đang khởi tạo mã hóa phần cứng WebCodecs...',
-    });
-
-    const renderer = new WebCodecsRenderer();
-    rendererRef.current = renderer;
+    setProgressPercent(5);
+    setCurrentStage('Đang khởi tạo kiến trúc đồ họa chuyển động HyperFrames...');
 
     try {
-      const renderRes = await renderer.renderVideo(manifest, (p) => {
-        setProgress(p);
-      });
+      const startRes = await apiClient.startRender(manifest);
+      setJobId(startRes.job_id);
+      setCurrentStage(startRes.stage_text || 'Đang kết xuất video...');
 
-      setResult(renderRes);
-      const url = URL.createObjectURL(renderRes.blob);
-      setVideoUrl(url);
+      // Start polling for real-time progress
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const status = await apiClient.getRenderStatus(startRes.job_id);
+          setProgressPercent(status.progress_percent || 0);
+          setCurrentStage(status.stage_text || 'Đang xử lý...');
+
+          if (status.status === 'completed') {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+            setIsRendering(false);
+            const downloadUri = apiClient.getRenderDownloadUrl(startRes.job_id);
+            setDownloadUrl(downloadUri);
+            setVideoUrl(downloadUri);
+            setVideoMetadata({
+              duration: status.duration_seconds,
+              size: status.file_size_bytes,
+            });
+          } else if (status.status === 'failed') {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+            setIsRendering(false);
+            setError(status.error_message || 'Quá trình kết xuất video thất bại');
+          }
+        } catch (err: any) {
+          console.warn('Error polling render status:', err);
+        }
+      }, 1000);
     } catch (err: any) {
-      if (err?.message !== 'Video rendering was cancelled') {
-        setError(err?.message || 'Có lỗi xảy ra trong quá trình kết xuất video');
-      }
-    } finally {
       setIsRendering(false);
-      rendererRef.current = null;
+      setError(err?.message || 'Không thể bắt đầu kết xuất video');
     }
   };
 
   const handleCancel = () => {
-    if (rendererRef.current) {
-      rendererRef.current.cancel();
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
     }
     setIsRendering(false);
-    setProgress(null);
+    setProgressPercent(0);
+    setCurrentStage('Đã hủy kết xuất');
   };
 
   const downloadFile = (blob: Blob, filename: string) => {
@@ -121,36 +135,38 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
 
   const handleDownloadCredits = () => {
     let content = `=== BẢN QUYỀN VÀ NGUỒN TƯ LIỆU (${manifest.title || 'Video'}) ===\n`;
-    content += `Video này sử dụng các tư liệu hình ảnh và âm thanh tuân thủ giấy phép Creative Commons và Miền công cộng:\n\n`;
-
+    content += `Video được xây dựng bằng kiến trúc Code-First Motion Graphics (HyperFrames + GSAP):\n\n`;
     manifest.scenes.forEach((scene, sIdx) => {
-      const asset = scene.assets?.[0];
-      if (asset) {
-        content += `Cảnh ${sIdx + 1}: ${asset.attribution_text || asset.source_url}\n`;
-        if (asset.license_type) content += `  Giấy phép: ${asset.license_type}\n`;
-        if (asset.source_url) content += `  Nguồn: ${asset.source_url}\n\n`;
-      }
+      content += `Cảnh ${sIdx + 1}: ${scene.narration_text}\n`;
+      content += `  Thời lượng: ${scene.duration_seconds}s\n`;
+      content += `  Hiệu ứng: ${scene.visual_method || 'Đồ họa chuyển động vector'}\n\n`;
     });
-
-    content += `Giọng đọc: Microsoft Edge Neural TTS (${manifest.voice_config?.voice || 'vi-VN-NamMinhNeural'})\n`;
-    content += `Sản xuất tự động bởi YTBER Studio.\n`;
+    content += `Giọng đọc: Neural TTS (${manifest.voice_config?.voice || 'vi-VN-NamMinhNeural'})\n`;
+    content += `Sản xuất tự động bởi YTBER Unified AI Video Studio.\n`;
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     downloadFile(blob, `${manifest.title || 'video'}-credits.txt`);
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
       <div className="bg-studio-surface border border-studio-border rounded-2xl max-w-xl w-full p-6 shadow-2xl relative flex flex-col gap-5">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-studio-border pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-studio-primary/20 flex items-center justify-center text-studio-primary">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-studio-primary flex items-center justify-center text-white shadow-md">
               <Film className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">Kết Xuất Video Trực Tiếp (In-Browser)</h3>
-              <p className="text-xs text-gray-400">WebCodecs Hardware Acceleration • 1080×1920 • 30 FPS</p>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                Kết Xuất Video MP4
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono uppercase">
+                  HyperFrames Engine
+                </span>
+              </h3>
+              <p className="text-xs text-gray-400">Headless Chromium + FFmpeg • 1080×1920 • 30 FPS • H.264 & AAC</p>
             </div>
           </div>
           <button
@@ -162,125 +178,110 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
           </button>
         </div>
 
-        {/* Browser compatibility check */}
-        {support && !support.supported && (
-          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex gap-3 text-amber-200 text-xs">
-            <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-400" />
-            <div className="flex flex-col gap-1">
-              <p className="font-semibold text-amber-300">Trình duyệt không hỗ trợ đầy đủ WebCodecs</p>
-              <ul className="list-disc list-inside space-y-0.5">
-                {support.issues.map((issue, idx) => (
-                  <li key={idx}>{issue}</li>
-                ))}
-              </ul>
-              <p className="text-gray-300 mt-1">
-                Vui lòng sử dụng <strong>Google Chrome, Microsoft Edge hoặc Brave</strong> trên máy tính để kết xuất video trực tiếp mượt mà nhất.
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Initial state (Ready to render) */}
-        {!isRendering && !result && (
+        {!isRendering && !videoUrl && (
           <div className="flex flex-col gap-4">
-            <div className="bg-studio-card p-4 rounded-xl border border-studio-border text-sm space-y-2">
+            <div className="bg-studio-card p-4 rounded-xl border border-studio-border text-xs space-y-2.5">
               <div className="flex justify-between text-gray-300">
-                <span>Độ phân giải:</span>
-                <span className="font-mono text-white">{manifest.video_specs.width} × {manifest.video_specs.height} ({manifest.aspect_ratio || '9:16'})</span>
+                <span>Độ phân giải & Tỷ lệ:</span>
+                <span className="font-mono text-white font-semibold">{manifest.video_specs.width} × {manifest.video_specs.height} ({manifest.aspect_ratio || '9:16'})</span>
               </div>
               <div className="flex justify-between text-gray-300">
-                <span>Tốc độ khung hình:</span>
-                <span className="font-mono text-white">30 FPS (H.264 Main L4.2)</span>
+                <span>Khung hình & Chuẩn nén:</span>
+                <span className="font-mono text-white font-semibold">30 FPS (H.264 High Profile avc1)</span>
               </div>
               <div className="flex justify-between text-gray-300">
-                <span>Tổng thời lượng:</span>
-                <span className="font-mono text-white">~{Math.round(manifest.total_duration_sec)} giây ({manifest.scenes.length} cảnh)</span>
+                <span>Tổng thời lượng & Cảnh:</span>
+                <span className="font-mono text-white font-semibold">~{Math.round(manifest.total_duration_sec)} giây ({manifest.scenes.length} cảnh hoạt hình)</span>
               </div>
               <div className="flex justify-between text-gray-300">
-                <span>Âm thanh:</span>
-                <span className="font-mono text-white">Stereo 48kHz AAC (Dynamic Ducking -3.5dB)</span>
+                <span>Âm thanh & Lồng tiếng:</span>
+                <span className="font-mono text-emerald-300 font-semibold">Stereo 48kHz AAC (Thuyết minh + BGM + SFX)</span>
               </div>
             </div>
 
             <button
-              onClick={handleStartRender}
-              disabled={support ? !support.supported : true}
-              className="w-full py-3.5 bg-gradient-to-r from-studio-primary to-indigo-600 hover:from-indigo-500 hover:to-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition hover:scale-[1.01]"
+              onClick={handleStartHyperFramesRender}
+              className="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-extrabold rounded-xl shadow-lg flex items-center justify-center gap-2 transition hover:scale-[1.01] border border-emerald-400/40 text-sm"
             >
-              <Play className="w-5 h-5 fill-current" />
-              Bắt Đầu Kết Xuất Video (Không Tốn Server)
+              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+              Bắt Đầu Kết Xuất MP4 (HyperFrames Deterministic)
             </button>
           </div>
         )}
 
         {/* Rendering progress state */}
-        {isRendering && progress && (
+        {isRendering && (
           <div className="flex flex-col gap-4 py-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-300 font-medium">{progress.statusText}</span>
-              <span className="font-mono font-bold text-studio-accent text-lg">{progress.percent}%</span>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-300 font-medium flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 text-studio-primary animate-spin" />
+                {currentStage}
+              </span>
+              <span className="font-mono font-bold text-studio-accent text-base">{progressPercent}%</span>
             </div>
 
             {/* Progress bar */}
             <div className="w-full bg-studio-card h-3 rounded-full overflow-hidden border border-studio-border">
               <div
-                className="bg-gradient-to-r from-studio-primary via-indigo-400 to-studio-accent h-full transition-all duration-150 ease-out"
-                style={{ width: `${progress.percent}%` }}
+                className="bg-gradient-to-r from-emerald-500 via-studio-primary to-amber-400 h-full transition-all duration-300 ease-out"
+                style={{ width: `${progressPercent}%` }}
               />
             </div>
 
             {/* Render stats */}
             <div className="grid grid-cols-3 gap-2 text-center text-xs bg-studio-card/60 p-3 rounded-xl border border-studio-border">
               <div>
-                <p className="text-gray-400">Khung hình</p>
-                <p className="font-mono font-semibold text-white mt-0.5">{progress.currentFrame} / {progress.totalFrames}</p>
+                <p className="text-gray-400">Tiến trình</p>
+                <p className="font-mono font-semibold text-emerald-400 mt-0.5">{jobId ? jobId.slice(0, 8) : 'HyperFrames'}</p>
               </div>
               <div>
-                <p className="text-gray-400">Tốc độ kết xuất</p>
-                <p className="font-mono font-semibold text-studio-highlight mt-0.5">{progress.effectiveFps} FPS</p>
+                <p className="text-gray-400">Chuẩn xuất</p>
+                <p className="font-mono font-semibold text-studio-highlight mt-0.5">H.264 MP4</p>
               </div>
               <div>
-                <p className="text-gray-400">Thời gian còn lại</p>
-                <p className="font-mono font-semibold text-white mt-0.5">~{progress.estimatedRemainingSec}s</p>
+                <p className="text-gray-400">Âm thanh</p>
+                <p className="font-mono font-semibold text-white mt-0.5">48kHz AAC</p>
               </div>
             </div>
 
             <button
               onClick={handleCancel}
-              className="py-2.5 px-4 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 rounded-xl text-sm font-semibold transition"
+              className="py-2 px-4 bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 rounded-xl text-xs font-semibold transition"
             >
-              Hủy Kết Xuất
+              Hủy Tiến Trình
             </button>
           </div>
         )}
 
         {/* Completed state */}
-        {result && videoUrl && (
+        {videoUrl && (
           <div className="flex flex-col gap-4 animate-fade-in">
-            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-3 text-emerald-300 text-sm">
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-3 text-emerald-300 text-xs">
               <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-400" />
               <div>
-                <p className="font-semibold">Kết xuất hoàn tất thành công!</p>
-                <p className="text-xs text-emerald-400/80">
-                  Thời lượng: {result.durationSec.toFixed(1)}s • Tốc độ: {result.effectiveFps} FPS • Dung lượng: {(result.fileSizeBytes / (1024 * 1024)).toFixed(1)} MB
+                <p className="font-bold text-sm">Kết xuất video thành công 100%!</p>
+                <p className="text-gray-300 mt-0.5">
+                  Thời lượng: {videoMetadata?.duration ? `${videoMetadata.duration.toFixed(1)}s` : `~${Math.round(manifest.total_duration_sec)}s`} • Dung lượng: {videoMetadata?.size ? `${(videoMetadata.size / (1024 * 1024)).toFixed(2)} MB` : 'Chuẩn'}
                 </p>
               </div>
             </div>
 
-            {/* Video preview preview */}
-            <div className="max-h-60 overflow-hidden rounded-xl border border-studio-border flex justify-center bg-black">
-              <video src={videoUrl} controls className="h-60 max-w-full object-contain" />
+            {/* Video preview */}
+            <div className="max-h-72 overflow-hidden rounded-xl border border-studio-border flex justify-center bg-black shadow-inner">
+              <video src={videoUrl} controls autoPlay className="h-72 max-w-full object-contain" />
             </div>
 
             {/* Action buttons */}
             <div className="grid grid-cols-3 gap-2">
-              <button
-                onClick={() => downloadFile(result.blob, `${manifest.title || 'video'}.mp4`)}
-                className="py-2.5 px-3 bg-studio-primary hover:bg-indigo-600 text-white text-xs font-bold rounded-xl shadow flex items-center justify-center gap-1.5 transition"
+              <a
+                href={downloadUrl || videoUrl}
+                download={`${manifest.title || 'video'}.mp4`}
+                className="py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl shadow flex items-center justify-center gap-1.5 transition text-center"
               >
                 <Download className="w-3.5 h-3.5" />
                 Tải MP4
-              </button>
+              </a>
 
               <button
                 onClick={handleDownloadSRT}
@@ -301,8 +302,8 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
 
             <button
               onClick={() => {
-                setResult(null);
                 setVideoUrl(null);
+                setDownloadUrl(null);
               }}
               className="text-xs text-center text-gray-400 hover:text-white transition py-1"
             >

@@ -465,4 +465,38 @@ export const apiClient = {
     if (!res.ok) throw new Error(`Kiểm tra VoiceStudio thất bại (${res.status})`);
     return await res.json();
   },
+
+  // 9. HyperFrames Backend Video Rendering API
+  async startRender(manifest: any): Promise<{ job_id: string; status: string; stage_text: string }> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/render/start`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ manifest }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Khởi tạo tiến trình kết xuất video thất bại (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async getRenderStatus(jobId: string): Promise<{
+    job_id: string;
+    status: string;
+    progress_percent: number;
+    stage_text: string;
+    output_mp4_url?: string;
+    duration_seconds?: number;
+    file_size_bytes?: number;
+    error_message?: string;
+  }> {
+    const res = await fetch(`${API_BASE}/render/status/${jobId}`);
+    if (!res.ok) throw new Error(`Lấy trạng thái kết xuất thất bại (${res.status})`);
+    return await res.json();
+  },
+
+  getRenderDownloadUrl(jobId: string): string {
+    return `${API_BASE}/render/download/${jobId}`;
+  },
 };

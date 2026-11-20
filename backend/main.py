@@ -14,6 +14,7 @@ from backend.routers.projects import router as projects_router, episode_manifest
 from backend.routers.research import router as research_router
 from backend.routers.director import router as director_router
 from backend.routers.soundscape import router as soundscape_router
+from backend.routers.render import router as render_router
 
 # In-memory Rate Limiting (Token Bucket / Sliding Window per IP)
 # Free-tier rate limits: 60 requests per minute per client IP
@@ -114,6 +115,7 @@ app.include_router(episode_manifest_router)
 app.include_router(research_router)
 app.include_router(director_router)
 app.include_router(soundscape_router)
+app.include_router(render_router)
 
 @app.get("/healthz", tags=["Health & Diagnostics"])
 async def health_check():
@@ -122,8 +124,8 @@ async def health_check():
         "status": "healthy",
         "service": "zero-budget-ai-video-studio-api",
         "timestamp": time.time(),
-        "architecture": "Architecture C (Hybrid WebCodecs)",
-        "rendering_location": "in-browser-client-side",
+        "architecture": "Code-First Motion Graphics (HyperFrames + GSAP)",
+        "rendering_location": "backend-hyperframes-ffmpeg",
         "cost_per_render": "$0.00"
     }
 

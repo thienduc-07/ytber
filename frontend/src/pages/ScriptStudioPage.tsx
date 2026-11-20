@@ -7,7 +7,7 @@ import { apiClient, getAuthHeaders } from '../services/apiClient';
 import type { SceneManifest, SceneItem, Project, GenreInfo, VoiceInfo } from '../types/database';
 import { 
   Sparkles, Play, ArrowLeft, Save, Sliders, Volume2, Mic, Film, Check, BookOpen, Layers, Music, Headphones, Image as ImageIcon,
-  Search, ExternalLink, ShoppingBag, Tag, ChevronDown, ChevronUp
+  Search, ExternalLink, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 const DEFAULT_SCRIPT = `Bạn có biết rằng, cách đây hơn 70 năm, tại một thung lũng lòng chảo ở Tây Bắc, quân và dân Việt Nam đã làm nên một kỳ tích chấn động địa cầu? Đó chính là chiến thắng Điện Biên Phủ lịch sử năm 1954. Dưới sự chỉ huy tài ba của Đại tướng Võ Nguyên Giáp, toàn quân ta đã kiên cường vượt mọi gian khổ, kéo pháo qua đèo cao, bạt núi mở đường để làm nên chiến công hiển hách lừng lẫy năm châu. Ngày 7 tháng 5 năm 1954, lá cờ Quyết chiến Quyết thắng tung bay trên nóc hầm De Castries, đánh dấu mốc son chói lọi trong lịch sử dân tộc! Hãy bấm đăng ký kênh để đón xem những câu chuyện lịch sử tự hào tiếp theo!`;
@@ -25,6 +25,7 @@ export const ScriptStudioPage: React.FC = () => {
   const [voiceVoice, setVoiceVoice] = useState('vi-VN-NamMinhNeural');
   const [voiceRate, setVoiceRate] = useState('+0%');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isGeneratingMovie, setIsGeneratingMovie] = useState(false);
   const [isSynthesizingVoice, setIsSynthesizingVoice] = useState(false);
   const [isDiscoveringAssets, setIsDiscoveringAssets] = useState(false);
   const [isVoiceTesting, setIsVoiceTesting] = useState(false);
@@ -33,15 +34,11 @@ export const ScriptStudioPage: React.FC = () => {
   const [showRenderModal, setShowRenderModal] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Research & Affiliate States
+  // Research State
   const [topicQuery, setTopicQuery] = useState('Chiến thắng Điện Biên Phủ 1954');
   const [isResearching, setIsResearching] = useState(false);
   const [researchReport, setResearchReport] = useState<any | null>(null);
   const [showResearchCard, setShowResearchCard] = useState(false);
-  const [showAffiliateCard, setShowAffiliateCard] = useState(false);
-  const [productName, setProductName] = useState('Sách Lịch Sử Kháng Chiến 1954');
-  const [affiliateUrl, setAffiliateUrl] = useState('https://shopee.vn/affiliate/dien-bien-phu');
-  const [isGeneratingAffiliate, setIsGeneratingAffiliate] = useState(false);
 
   // Initial manifest
   const [manifest, setManifest] = useState<SceneManifest>({
@@ -274,6 +271,32 @@ export const ScriptStudioPage: React.FC = () => {
     }
   };
 
+  const handleZeroTouchGenerateMovie = async () => {
+    if (!scriptText.trim()) return;
+    setIsGeneratingMovie(true);
+    setNotice('🎬 Zero-Touch AI Studio: Đang đạo diễn kịch bản, tạo giọng AI, ghép tư liệu & hòa âm 4 Bus...');
+
+    try {
+      const generatedManifest = await apiClient.generateMovie({
+        script_text: scriptText,
+        genre: selectedGenre,
+        video_format: videoFormat,
+        voice: voiceVoice,
+        rate: voiceRate,
+      });
+
+      setManifest(generatedManifest);
+      setActiveSceneIndex(0);
+      setNotice(`🎬 Tạo phim tự động thành công! Đã đồng bộ ${generatedManifest.scenes.length} cảnh (~${Math.round(generatedManifest.total_duration_sec)}s) với giọng đọc AI, tư liệu thực & âm thanh 4-Bus.`);
+    } catch (err: any) {
+      console.error('Error generating movie:', err);
+      setNotice(`Lỗi tạo phim tự động: ${err?.message || 'Vui lòng thử lại'}`);
+    } finally {
+      setIsGeneratingMovie(false);
+      setTimeout(() => setNotice(null), 5000);
+    }
+  };
+
   const handleTestVoice = async () => {
     setIsVoiceTesting(true);
     try {
@@ -459,37 +482,6 @@ export const ScriptStudioPage: React.FC = () => {
     setTimeout(() => setNotice(null), 3000);
   };
 
-  const handleGenerateAffiliate = async () => {
-    if (!productName.trim()) return;
-    setIsGeneratingAffiliate(true);
-    setNotice('Đang tạo kịch bản gắn kết sản phẩm tiếp thị liên kết (Affiliate)...');
-    try {
-      const plan = await apiClient.generateAffiliatePlan({
-        product_name: productName,
-        affiliate_url: affiliateUrl,
-        product_category: selectedGenre === 'historical_doc' ? 'books' : 'technology',
-        target_platform: videoFormat === 'long-form' ? 'landscape_yt' : 'youtube_shorts'
-      });
-      const generatedScript = `${plan.storytelling_hook} ${plan.feature_highlights.join('. ')}. ${plan.honest_limitations} ${plan.cta_text}`;
-      setScriptText(generatedScript);
-      setManifest(prev => ({
-        ...prev,
-        affiliate_campaign: {
-          product_name: productName,
-          affiliate_url: affiliateUrl,
-          cta_style: 'floating_banner',
-          disclosure_text: plan.disclosure_statement || 'Video có liên kết tiếp thị liên kết (Affiliate)'
-        }
-      }));
-      setNotice(`Đã tích hợp sản phẩm "${productName}" vào kịch bản & gắn biểu ngữ CTA!`);
-    } catch (err: any) {
-      setNotice(`Lỗi tạo kế hoạch affiliate: ${err.message}`);
-    } finally {
-      setIsGeneratingAffiliate(false);
-      setTimeout(() => setNotice(null), 3500);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-studio-bg flex flex-col">
       {/* Studio Header Bar */}
@@ -523,6 +515,15 @@ export const ScriptStudioPage: React.FC = () => {
               <span>{notice}</span>
             </div>
           )}
+
+          <button
+            onClick={handleZeroTouchGenerateMovie}
+            disabled={isGeneratingMovie}
+            className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs font-extrabold px-4 py-2 rounded-xl shadow-lg transition hover:scale-105 border border-emerald-400/40"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+            <span>{isGeneratingMovie ? 'Đang tạo phim tự động...' : '🎬 Tạo Phim Tự Động (Zero-Touch AI)'}</span>
+          </button>
 
           <button
             onClick={handleSaveProject}
@@ -766,69 +767,29 @@ export const ScriptStudioPage: React.FC = () => {
               <span>{isDiscoveringAssets ? 'Đang tìm & tải tư liệu hoạt họa...' : 'Tự Động Ghép Tư Liệu Hoạt Họa (100% Vector/Toon)'}</span>
             </button>
 
+            {/* Zero-Touch 100% Automated Movie Creation */}
+            <button
+              type="button"
+              onClick={handleZeroTouchGenerateMovie}
+              disabled={isGeneratingMovie}
+              className="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 disabled:opacity-50 text-white font-extrabold rounded-xl shadow-xl flex items-center justify-center gap-2 transition hover:scale-[1.01] mt-1 text-xs border border-emerald-400/40"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+              <span>
+                {isGeneratingMovie
+                  ? 'Đang đạo diễn, lồng tiếng, tìm tư liệu & dựng phim tự động...'
+                  : '🎬 Tạo Phim Tự Động 100% (Zero-Touch AI Studio)'}
+              </span>
+            </button>
+
             <button
               onClick={handleAnalyzeScript}
               disabled={isAnalyzing}
-              className="w-full py-3 bg-gradient-to-r from-studio-primary to-indigo-600 hover:from-indigo-500 hover:to-indigo-700 disabled:opacity-50 text-white font-bold rounded-xl shadow flex items-center justify-center gap-2 transition hover:scale-[1.01] mt-1 text-xs"
+              className="w-full py-2.5 bg-studio-card hover:bg-studio-border border border-studio-border disabled:opacity-50 text-gray-300 font-semibold rounded-xl shadow flex items-center justify-center gap-2 transition hover:scale-[1.01] text-xs"
             >
               <Sparkles className="w-4 h-4 text-studio-highlight" />
               <span>{isAnalyzing ? 'Đang phân tích kịch bản theo thể loại...' : 'Phân Tích Kịch Bản Bằng AI'}</span>
             </button>
-          </div>
-
-          {/* Commercialization & Affiliate Card */}
-          <div className="bg-studio-surface border border-studio-border rounded-2xl p-4 shadow-xl flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                <ShoppingBag className="w-4 h-4 text-amber-400" />
-                Tiếp Thị Liên Kết & Thương Mại Hóa (Affiliate)
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowAffiliateCard(!showAffiliateCard)}
-                className="text-gray-400 hover:text-white text-xs flex items-center gap-1"
-              >
-                {showAffiliateCard ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-2.5">
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-400 mb-1 flex items-center gap-1">
-                  <Tag className="w-3 h-3 text-studio-accent" /> Tên sản phẩm giới thiệu:
-                </label>
-                <input
-                  type="text"
-                  value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
-                  placeholder="Vd: Sách Lịch Sử Kháng Chiến, Khóa Học AI..."
-                  className="w-full bg-studio-bg border border-studio-border rounded-xl px-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-studio-primary font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-400 mb-1 flex items-center gap-1">
-                  <ExternalLink className="w-3 h-3 text-studio-accent" /> Liên kết sản phẩm (Affiliate Link):
-                </label>
-                <input
-                  type="text"
-                  value={affiliateUrl}
-                  onChange={(e) => setAffiliateUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full bg-studio-bg border border-studio-border rounded-xl px-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-studio-primary font-mono"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleGenerateAffiliate}
-                disabled={isGeneratingAffiliate}
-                className="w-full py-2 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition"
-              >
-                <ShoppingBag className="w-3.5 h-3.5" />
-                <span>{isGeneratingAffiliate ? 'Đang tạo kịch bản affiliate...' : 'Tạo Kịch Bản Affiliate Tự Động & Gắn CTA'}</span>
-              </button>
-            </div>
           </div>
         </section>
 

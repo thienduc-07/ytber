@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-19T21:39:54Z",
+  "timestamp": "2026-11-20T01:38:54Z",
   "total_topics": 5,
   "results": [
     {
@@ -8,9 +8,9 @@
       "genre": "historical_doc",
       "scenes_planned": 3,
       "characters_registered": 2,
-      "render_and_verification_time_sec": 0.36,
+      "render_and_verification_time_sec": 0.57,
       "aqc_overall_passed": true,
-      "temporal_motion_delta": 0.0136,
+      "temporal_motion_delta": 0.01359,
       "animated_policy_ratio": 1.0,
       "audio_rms": 0.2065,
       "verdict": "PASSED: Production-Grade Animated Shorts Verified"
@@ -21,9 +21,9 @@
       "genre": "economics",
       "scenes_planned": 3,
       "characters_registered": 1,
-      "render_and_verification_time_sec": 0.31,
+      "render_and_verification_time_sec": 0.51,
       "aqc_overall_passed": true,
-      "temporal_motion_delta": 0.02141,
+      "temporal_motion_delta": 0.02142,
       "animated_policy_ratio": 1.0,
       "audio_rms": 0.2065,
       "verdict": "PASSED: Production-Grade Animated Shorts Verified"
@@ -34,9 +34,9 @@
       "genre": "technology",
       "scenes_planned": 3,
       "characters_registered": 1,
-      "render_and_verification_time_sec": 0.37,
+      "render_and_verification_time_sec": 0.56,
       "aqc_overall_passed": true,
-      "temporal_motion_delta": 0.01035,
+      "temporal_motion_delta": 0.01037,
       "animated_policy_ratio": 1.0,
       "audio_rms": 0.2065,
       "verdict": "PASSED: Production-Grade Animated Shorts Verified"
@@ -47,7 +47,7 @@
       "genre": "science",
       "scenes_planned": 3,
       "characters_registered": 1,
-      "render_and_verification_time_sec": 0.34,
+      "render_and_verification_time_sec": 0.48,
       "aqc_overall_passed": true,
       "temporal_motion_delta": 0.01152,
       "animated_policy_ratio": 1.0,
@@ -60,7 +60,7 @@
       "genre": "environment",
       "scenes_planned": 3,
       "characters_registered": 1,
-      "render_and_verification_time_sec": 0.34,
+      "render_and_verification_time_sec": 0.5,
       "aqc_overall_passed": true,
       "temporal_motion_delta": 0.00891,
       "animated_policy_ratio": 1.0,

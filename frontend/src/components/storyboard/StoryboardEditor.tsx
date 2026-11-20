@@ -242,8 +242,11 @@ export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
                   </div>
 
                   {scene.assets && scene.assets[0] && (
-                    <div className="flex items-center gap-1.5 text-gray-400 text-[11px] truncate max-w-xs">
+                    <div className="flex items-center gap-1.5 text-gray-400 text-[11px] truncate max-w-xs" title={scene.assets[0].attribution_text || ''}>
                       <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
+                      <span className="text-[10px] bg-emerald-950/60 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded font-mono uppercase">
+                        {(scene.assets[0] as any).provider || 'Tư liệu'}
+                      </span>
                       <span className="truncate">{scene.assets[0].attribution_text || scene.assets[0].license_type}</span>
                     </div>
                   )}

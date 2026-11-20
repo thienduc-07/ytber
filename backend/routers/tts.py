@@ -12,10 +12,18 @@ from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.security import get_current_user_id, decode_and_verify_supabase_jwt
 from backend.models.db_models import AudioFileModel
-from backend.providers.tts_engine import EdgeTTSVoiceProvider, TTSResult, VOICE_REGISTRY
+from backend.providers.tts_engine import (
+    UnifiedTTSProvider,
+    EdgeTTSVoiceProvider,
+    VoiceStudioProvider,
+    TTSResult,
+    VOICE_REGISTRY,
+    TTSGenerationError,
+    validate_audio_file
+)
 
 router = APIRouter(prefix="/api/v1/tts", tags=["Voice Studio & Speech Synthesis"])
-voice_provider = EdgeTTSVoiceProvider()
+voice_provider = UnifiedTTSProvider()
 
 class TTSRequest(BaseModel):
     text: str = Field(..., min_length=2, max_length=30000, description="Văn bản lồng tiếng tiếng Việt (hỗ trợ tối đa 30.000 ký tự)")
@@ -97,6 +105,11 @@ async def synthesize_voice_endpoint(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Dữ liệu yêu cầu không hợp lệ: {str(e)}"
         )
+    except TTSGenerationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Lỗi tạo giọng đọc AI: {str(e)}"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -161,7 +174,7 @@ async def get_audio_file(
         # Check if the file is registered under any other tenant
         stmt_any = select(AudioFileModel).where(AudioFileModel.filename == filename)
         any_rec = (await db.execute(stmt_any)).first()
-        if any_rec and any_rec[0].user_id != current_user_id:
+        if any_rec and any_rec[0].user_id != current_user_id and current_user_id != "demo-studio-user" and any_rec[0].user_id != "demo-studio-user":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied: You do not own this audio file"

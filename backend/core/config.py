@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     TTS_CACHE_ENABLED: bool = True
     TTS_CACHE_TTL_SECONDS: int = 604800  # 7 days
 
+    # VoiceStudio Integration (Local Open-Source TTS Engine, AGPL-3.0)
+    VOICESTUDIO_URL: str = "http://127.0.0.1:3900"
+    VOICESTUDIO_DEFAULT_VOICE: str = "default"
+    VOICESTUDIO_TIMEOUT_SECONDS: float = 30.0
+    VOICESTUDIO_ENABLED: bool = True
+
     # Supabase Credentials (for cloud multi-tenancy)
     SUPABASE_URL: str = "https://placeholder-project.supabase.co"
     SUPABASE_ANON_KEY: str = "placeholder-anon-key"

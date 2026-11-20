@@ -424,11 +424,6 @@ export class WebCodecsRenderer {
           // Render Animated Vietnamese Karaoke Subtitles (Synced with Phase 2 Word Boundaries)
           this.renderSubtitles(ctx, width, height, scene, localT);
 
-          // Render Commercial Affiliate CTA & Disclosure Overlay (if configured)
-          if (manifest.affiliate_campaign?.product_name) {
-            this.renderAffiliateCTA(ctx, width, height, manifest.affiliate_campaign, globalT);
-          }
-
           // Create and encode VideoFrame
           const timestampMicro = Math.round((globalFrame * 1_000_000) / fps);
           const durationMicro = Math.round(1_000_000 / fps);
@@ -648,47 +643,5 @@ export class WebCodecsRenderer {
 
       startX += wordWidths[idx] + spaceWidth;
     }
-  }
-
-  /**
-   * Renders Commercial Affiliate CTA & Transparent Disclosure Badge
-   */
-  private renderAffiliateCTA(
-    ctx: CanvasRenderingContext2D,
-    w: number,
-    h: number,
-    affiliate: { product_name: string; cta_style?: string; disclosure_text?: string },
-    globalT: number
-  ) {
-    const ctaY = Math.round(h * 0.12);
-    const ctaW = Math.round(w * 0.82);
-    const ctaH = Math.round(Math.min(w, h) * 0.08);
-    const ctaX = Math.round((w - ctaW) / 2);
-    const pulse = Math.sin(globalT * 3.5) * 2;
-
-    ctx.save();
-    // CTA Banner
-    ctx.fillStyle = 'rgba(234, 88, 12, 0.92)';
-    ctx.beginPath();
-    ctx.roundRect(ctaX, ctaY + pulse, ctaW, ctaH, 16);
-    ctx.fill();
-    ctx.strokeStyle = '#fde047';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    ctx.fillStyle = '#ffffff';
-    const fontSize = Math.round(Math.min(w, h) * 0.032);
-    ctx.font = `bold ${fontSize}px "Be Vietnam Pro", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`🛒 ${affiliate.product_name} • Nhấp link mô tả`, w / 2, ctaY + pulse + ctaH / 2);
-
-    // Disclosure Notice
-    if (affiliate.disclosure_text) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.font = `italic ${Math.round(fontSize * 0.65)}px "Be Vietnam Pro", sans-serif`;
-      ctx.fillText(affiliate.disclosure_text, w / 2, ctaY + pulse + ctaH + 16);
-    }
-    ctx.restore();
   }
 }

@@ -81,30 +81,6 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
         ? activeScene.narration_text.slice(0, 55) + '...'
         : activeScene.narration_text;
       ctx.fillText(displayText, w / 2, subY);
-
-      // 3. Render Commercial Affiliate CTA Overlay (if active)
-      if (manifest.affiliate_campaign?.product_name) {
-        const aff = manifest.affiliate_campaign;
-        const ctaY = Math.round(h * 0.12);
-        const ctaW = Math.round(w * 0.78);
-        const ctaH = 68;
-        const ctaX = Math.round((w - ctaW) / 2);
-
-        // Animated subtle pulse
-        const ctaPulse = Math.sin(localTime * 4) * 2;
-
-        ctx.fillStyle = 'rgba(234, 88, 12, 0.92)'; // Bright amber-orange
-        ctx.beginPath();
-        ctx.roundRect(ctaX, ctaY + ctaPulse, ctaW, ctaH, 16);
-        ctx.fill();
-        ctx.strokeStyle = '#fde047';
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 26px "Be Vietnam Pro", sans-serif';
-        ctx.fillText(`🛒 ${aff.product_name} • Nhấp link mô tả`, w / 2, ctaY + ctaPulse + ctaH / 2);
-      }
     }
   }, [localTime, manifest, isPlaying]);
 

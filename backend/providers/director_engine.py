@@ -591,3 +591,112 @@ class AIDirectorEngine:
             entities=entities,
             ai_provider_used="AIDirectorEngine"
         )
+
+    def generate_film_blueprint(
+        self,
+        script_text: str,
+        genre: Optional[str] = None,
+        video_format: str = "short-form",
+        visual_style: str = "2d_cartoon"
+    ) -> Dict[str, Any]:
+        """
+        Produces a rich, zero-touch Film Blueprint following dramatic storytelling principles:
+        1. 5-part structure:
+           - Hook (3-5s): Gripping narrative hook, high emotional stake, visual & audio burst.
+           - Setup: World context, characters, thematic premise.
+           - Conflict: Rising stakes, challenge, movement.
+           - Climax: Peak tension, heroic/decisive moment, high sound intensity.
+           - Resolution: Impact, conclusion, legacy & subscription call-to-action.
+        2. Character Bible: Detailed character rig specs for visual and narrative consistency.
+        3. Environment Bible: Specific physical settings, lighting, color palette, weather particles.
+        4. Structured scene breakdown with visual search queries, visual method, camera movements, and audio cues.
+        """
+        analysis = self.analyze_and_direct(
+            script_text=script_text,
+            genre=genre,
+            video_format=video_format,
+            visual_style=visual_style
+        )
+
+        char_bible = {
+            c_id: {
+                "name": c.name,
+                "role": c.role,
+                "costume": c.costume_description,
+                "facial_features": c.facial_features,
+                "color_scheme": c.color_scheme,
+                "props": c.distinguishing_props
+            }
+            for c_id, c in analysis.character_registry.items()
+        }
+
+        env_bible = {
+            "primary_era": analysis.context_era,
+            "narrative_arc": analysis.narrative_arc,
+            "palette": analysis.scenes[0].color_palette if analysis.scenes else ["#1E293B", "#38BDF8"],
+            "emotional_tone": analysis.emotional_tone,
+            "target_audience": analysis.target_audience
+        }
+
+        dramatic_stages = ["hook", "setup", "conflict", "climax", "resolution"]
+        total_sc = len(analysis.scenes)
+        blueprint_scenes = []
+
+        for idx, sc in enumerate(analysis.scenes):
+            if total_sc <= 5:
+                stage = dramatic_stages[idx] if idx < len(dramatic_stages) else "resolution"
+            else:
+                if idx == 0:
+                    stage = "hook"
+                elif idx == 1:
+                    stage = "setup"
+                elif idx == total_sc - 1:
+                    stage = "resolution"
+                elif idx == total_sc - 2:
+                    stage = "climax"
+                else:
+                    stage = "conflict"
+
+            subject_token = analysis.main_subject[:30]
+            clean_sentence = re.sub(r'[^\w\s]', '', sc.narration_text)
+            kw_tokens = [w for w in clean_sentence.split() if len(w) > 3][:4]
+            visual_query = f"{subject_token} {' '.join(kw_tokens)}".strip()
+
+            blueprint_scenes.append({
+                "scene_order": sc.scene_order,
+                "scene_id": sc.scene_id,
+                "scene_type": stage,
+                "narrative_stage": stage,
+                "narration_text": sc.narration_text,
+                "estimated_duration": sc.duration_seconds,
+                "visual_query": visual_query,
+                "visual_method": sc.visual_method,
+                "visual_description": sc.visual_description,
+                "camera_direction": sc.camera_movement,
+                "transition": sc.transition,
+                "environment_setting": sc.environment.setting_name if sc.environment else "studio",
+                "ambient_profile": sc.environment.environment_type if sc.environment else "generic_ambient",
+                "sfx_cues": [
+                    {
+                        "sfx_id": s.sfx_id,
+                        "sfx_type": s.sfx_type,
+                        "description": s.description,
+                        "offset_ms": s.start_time_offset_ms,
+                        "volume": s.volume
+                    }
+                    for s in (sc.sound_design or [])
+                ],
+                "suggested_asset_keywords": sc.suggested_asset_keywords
+            })
+
+        return {
+            "title": analysis.title,
+            "genre": analysis.genre,
+            "video_format": analysis.video_format,
+            "aspect_ratio": analysis.aspect_ratio,
+            "estimated_duration_seconds": analysis.estimated_duration_seconds,
+            "character_bible": char_bible,
+            "environment_bible": env_bible,
+            "dramatic_arc": analysis.narrative_arc,
+            "scenes": blueprint_scenes
+        }

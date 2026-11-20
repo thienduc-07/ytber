@@ -71,20 +71,6 @@ export interface TopicResearchReport {
   recommended_style: string;
 }
 
-export interface AffiliateContentPlan {
-  product_name: string;
-  product_category: string;
-  affiliate_url: string;
-  target_platform: string;
-  storytelling_hook: string;
-  feature_highlights: string[];
-  honest_limitations: string;
-  comparison_angle: string;
-  cta_text: string;
-  disclosure_statement: string;
-  qr_code_enabled: boolean;
-}
-
 export interface AnalyzeScriptParams {
   script_text: string;
   target_duration_seconds?: number;
@@ -116,6 +102,44 @@ export interface TTSResponse {
   provider: string;
   sample_rate: number;
   format: string;
+}
+
+export interface GenerateMovieParams {
+  script_text: string;
+  genre?: string;
+  video_format?: 'short-form' | 'long-form';
+  voice?: string;
+  rate?: string;
+  pitch?: string;
+  visual_style?: string;
+}
+
+export interface FilmBlueprint {
+  title: string;
+  genre: string;
+  video_format: string;
+  aspect_ratio: string;
+  estimated_duration_seconds: number;
+  character_bible: Record<string, any>;
+  environment_bible: Record<string, any>;
+  dramatic_arc: string;
+  scenes: Array<{
+    scene_order: number;
+    scene_id: string;
+    scene_type: string;
+    narrative_stage: string;
+    narration_text: string;
+    estimated_duration: number;
+    visual_query: string;
+    visual_method: string;
+    visual_description: string;
+    camera_direction: string;
+    transition: string;
+    environment_setting: string;
+    ambient_profile: string;
+    sfx_cues: any[];
+    suggested_asset_keywords?: string[];
+  }>;
 }
 
 export const apiClient = {
@@ -177,26 +201,6 @@ export const apiClient = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Nghiên cứu chủ đề thất bại (${res.status})`);
-    }
-    return await res.json();
-  },
-
-  // 2.2 Commercial Content & Affiliate Engine
-  async generateAffiliatePlan(params: {
-    product_name: string;
-    product_category: string;
-    affiliate_url: string;
-    target_platform?: string;
-  }): Promise<AffiliateContentPlan> {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE}/research/affiliate-plan`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(params),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Tạo kế hoạch tiếp thị thất bại (${res.status})`);
     }
     return await res.json();
   },
@@ -380,6 +384,35 @@ export const apiClient = {
     });
     if (!res.ok) {
       throw new Error(`Lưu kịch bản phân cảnh thất bại (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  // 6. Zero-Touch AI Movie Director (1-Click Full Production Pipeline)
+  async generateMovie(params: GenerateMovieParams): Promise<SceneManifest> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/director/generate-movie`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Sản xuất phim tự động thất bại (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async getFilmBlueprint(params: { script_text: string; genre?: string; video_format?: string }): Promise<FilmBlueprint> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/director/blueprint`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Tạo bản thiết kế phim thất bại (${res.status})`);
     }
     return await res.json();
   },

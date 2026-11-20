@@ -66,16 +66,3 @@ def test_research_router_endpoints():
     rep_data = post_resp.json()
     assert rep_data["category"] == "technology"
     assert len(rep_data["key_entities"]) >= 1
-
-    # 3. Affiliate monetization plan
-    aff_resp = client.post("/api/v1/research/affiliate-plan", json={
-        "product_name": "Khóa học AI Video Master",
-        "product_category": "education",
-        "affiliate_url": "https://ytber.studio/partner/ai-master",
-        "target_platform": "youtube_shorts"
-    }, headers=headers)
-    assert aff_resp.status_code == 200
-    aff_data = aff_resp.json()
-    assert "Khóa học AI Video Master" in aff_data["product_name"]
-    assert "Affiliate Link" in aff_data["disclosure_statement"]
-    assert aff_data["qr_code_enabled"] is True

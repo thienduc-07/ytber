@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from typing import Dict, Any, Optional
-from sqlalchemy import Column, String, Integer, Float, Text, JSON, ForeignKey, Index
+from sqlalchemy import Column, String, Integer, Float, Text, JSON, ForeignKey, Index, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -96,7 +96,6 @@ class ChapterModel(Base):
             "status": self.status,
             "created_at": self.created_at,
         }
-
 class RenderJobModel(Base):
     __tablename__ = "render_jobs"
 
@@ -123,4 +122,71 @@ class RenderJobModel(Base):
             "error_message": self.error_message,
             "created_at": self.created_at,
             "completed_at": self.completed_at,
+        }
+
+class AudioFileModel(Base):
+    __tablename__ = "audio_files"
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(64), nullable=False, index=True)
+    filename = Column(String(255), nullable=False, index=True)
+    duration_seconds = Column(Float, default=0.0)
+    created_at = Column(String(32), default=lambda: datetime.utcnow().isoformat() + "Z")
+
+    __table_args__ = (
+        Index("idx_audio_filename_user", "filename", "user_id", unique=True),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "filename": self.filename,
+            "duration_seconds": self.duration_seconds,
+            "created_at": self.created_at,
+        }
+class AssetModel(Base):
+    __tablename__ = "assets"
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(64), nullable=False, index=True)
+    sha256 = Column(String(64), nullable=False, index=True)
+    filename = Column(String(255), nullable=False, index=True)
+    provider = Column(String(64), default="unknown")
+    source_url = Column(String(1024), default="")
+    media_type = Column(String(32), default="image")
+    title = Column(String(255), default="")
+    creator = Column(String(255), default="")
+    license_type = Column(String(128), default="")
+    license_url = Column(String(512), default="")
+    attribution_required = Column(Boolean, default=True)
+    attribution_text = Column(Text, default="")
+    width = Column(Integer, default=0)
+    height = Column(Integer, default=0)
+    file_size_bytes = Column(Integer, default=0)
+    created_at = Column(String(32), default=lambda: datetime.utcnow().isoformat() + "Z")
+
+    __table_args__ = (
+        Index("idx_asset_filename_user", "filename", "user_id", unique=True),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "sha256": self.sha256,
+            "filename": self.filename,
+            "provider": self.provider,
+            "source_url": self.source_url,
+            "media_type": self.media_type,
+            "title": self.title,
+            "creator": self.creator,
+            "license_type": self.license_type,
+            "license_url": self.license_url,
+            "attribution_required": self.attribution_required,
+            "attribution_text": self.attribution_text,
+            "width": self.width,
+            "height": self.height,
+            "file_size_bytes": self.file_size_bytes,
+            "created_at": self.created_at,
         }

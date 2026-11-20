@@ -1,0 +1,33 @@
+# Git & VCS
+.git
+.gitignore
+
+# Python virtual environments & caches
+.venv
+venv
+backend/.venv
+__pycache__
+*/__pycache__
+*.py[cod]
+*$py.class
+.pytest_cache
+
+# Node dependencies & builds
+node_modules
+frontend/node_modules
+dist
+frontend/dist
+build
+.cache
+
+# Local databases and runtime data
+data/
+*.db
+*.sqlite
+*.sqlite3
+data/audio/*.mp3
+
+# Temporary & audit files
+tmp/
+/tmp
+*.log

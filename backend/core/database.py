@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 from typing import AsyncGenerator
+from sqlalchemy import event, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from backend.core.config import settings
 from backend.models.db_models import Base
@@ -13,9 +15,11 @@ if "sqlite" in settings.DATABASE_URL:
         if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir, exist_ok=True)
 
-# Ensure audio storage directory exists
+# Ensure audio and asset storage directories exist
 if settings.AUDIO_STORAGE_PATH and not os.path.exists(settings.AUDIO_STORAGE_PATH):
     os.makedirs(settings.AUDIO_STORAGE_PATH, exist_ok=True)
+if getattr(settings, "ASSET_STORAGE_PATH", None) and not os.path.exists(settings.ASSET_STORAGE_PATH):
+    os.makedirs(settings.ASSET_STORAGE_PATH, exist_ok=True)
 
 engine = create_async_engine(
     settings.DATABASE_URL,
@@ -23,6 +27,14 @@ engine = create_async_engine(
     future=True,
     connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
 )
+
+# Enforce SQLite foreign key constraints for all connection pool checkouts
+@event.listens_for(engine.sync_engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    if "sqlite" in settings.DATABASE_URL:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
@@ -35,18 +47,41 @@ AsyncSessionLocal = async_sessionmaker(
 def init_db_sync() -> None:
     """Synchronously ensure database tables exist (works for SQLite and startup)."""
     from sqlalchemy import create_engine
-    sync_url = settings.DATABASE_URL.replace("+aiosqlite", "")
+    sync_url = settings.DATABASE_URL.replace("+aiosqlite", "").replace("+asyncpg", "")
     sync_engine = create_engine(
         sync_url,
         connect_args={"check_same_thread": False} if "sqlite" in sync_url else {}
     )
+    if "sqlite" in sync_url:
+        @event.listens_for(sync_engine, "connect")
+        def set_sync_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
     Base.metadata.create_all(sync_engine)
+    if "sqlite" in sync_url:
+        with sync_engine.connect() as conn:
+            try:
+                conn.execute(text("DROP INDEX IF EXISTS ix_audio_files_filename;"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audio_files_filename ON audio_files (filename);"))
+                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_filename_user ON audio_files (filename, user_id);"))
+                conn.commit()
+            except Exception:
+                pass
     sync_engine.dispose()
 
 async def init_db() -> None:
     """Initialize database tables idempotently."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if "sqlite" in settings.DATABASE_URL:
+            try:
+                await conn.execute(text("DROP INDEX IF EXISTS ix_audio_files_filename;"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audio_files_filename ON audio_files (filename);"))
+                await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_filename_user ON audio_files (filename, user_id);"))
+            except Exception:
+                pass
 
 # Ensure tables exist immediately on module import (vital for TestClient & CLI tools)
 try:

@@ -24,7 +24,7 @@ script_provider = GroqScriptProvider()
 @router.get("/genres", response_model=List[Dict[str, Any]])
 async def list_supported_genres():
     """Lists all 10 specialized genres with pacing, narrative stages, and visual directions."""
-    return [g.dict() for g in GENRE_REGISTRY.values()]
+    return [g.model_dump() if hasattr(g, "model_dump") else g.dict() for g in GENRE_REGISTRY.values()]
 
 @router.post("/analyze", response_model=ScriptAnalysisResult)
 async def analyze_script_endpoint(

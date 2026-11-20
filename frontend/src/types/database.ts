@@ -56,9 +56,38 @@ export interface SceneAsset {
   full_url?: string;
 }
 
+export interface CharacterProfile {
+  character_id: string;
+  name: string;
+  role: string;
+  body_proportions: string;
+  costume_description: string;
+  color_scheme: string[];
+  facial_features?: string;
+  distinguishing_props?: string[];
+}
+
+export interface EnvironmentSpec {
+  setting_name: string;
+  environment_type: string;
+  time_of_day: string;
+  weather_particles: string;
+  primary_colors: string[];
+}
+
+export interface AnimationDirective {
+  character_action: string;
+  object_action: string;
+  parallax_enabled: boolean;
+  motion_intensity: number;
+  zoom_ratio?: number;
+}
+
 export interface SoundDesignItem {
+  sfx_id?: string;
   sfx_type: string;
   description: string;
+  start_time_offset_ms?: number;
   volume: number;
   duck_narration: boolean;
 }
@@ -68,6 +97,7 @@ export interface SceneItem {
   scene_id?: string;
   scene_order: number;
   chapter_order?: number;
+  narrative_purpose?: string;
   scene_type: string;
   narration_text: string;
   duration_seconds: number;
@@ -75,13 +105,25 @@ export interface SceneItem {
   end_frame: number;
   visual_method: 'photo' | 'stock' | 'archival' | 'map' | 'svg' | 'infographic' | 'procedural' | 'parallax' | 'toon';
   visual_description?: string;
+  environment?: EnvironmentSpec;
+  character_descriptions?: string[];
+  character_poses?: string[];
+  props?: string[];
+  camera_angle?: string;
+  camera_movement?: string;
+  camera_direction?: string;
+  animation_instructions?: AnimationDirective;
+  lighting?: string;
+  color_palette?: string[];
   visual_config: Record<string, any>;
   subtitles_json: SubtitleItem[];
   assets?: SceneAsset[];
   audio_url?: string;
-  camera_direction?: string;
   transition?: string;
+  transition_type?: string;
+  music_direction?: string;
   sound_design?: SoundDesignItem[];
+  sound_effects?: SoundDesignItem[];
   source_references?: string[];
 }
 
@@ -98,6 +140,14 @@ export interface SceneManifest {
   episode_id: string;
   title: string;
   genre?: string;
+  main_subject?: string;
+  topic_category?: string;
+  context_era?: string;
+  narrative_arc?: string;
+  emotional_tone?: string;
+  target_audience?: string;
+  visual_style_preset?: string;
+  character_registry?: Record<string, CharacterProfile>;
   video_format?: 'short-form' | 'long-form';
   aspect_ratio?: string;
   total_duration_sec: number;

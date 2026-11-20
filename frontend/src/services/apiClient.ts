@@ -1,9 +1,10 @@
 import { supabase } from './supabase';
 import type { Project, SceneManifest, SceneAsset, GenreInfo, VoiceInfo } from '../types/database';
 
-const API_BASE = '/api/v1';
+const rawBase = (import.meta.env.VITE_API_BASE_URL as string) || '';
+const API_BASE = rawBase ? (rawBase.endsWith('/api/v1') ? rawBase : `${rawBase.replace(/\/$/, '')}/api/v1`) : '/api/v1';
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
+export async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -15,16 +16,59 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
       headers['Authorization'] = `Bearer ${token}`;
     } else {
       // Local development or unauthenticated fallback token
-      const localToken = localStorage.getItem('ytber_access_token');
+      const localToken = localStorage.getItem('ytber_access_token') || localStorage.getItem('ytber_guest_token');
       if (localToken) {
         headers['Authorization'] = `Bearer ${localToken}`;
+      } else {
+        const guestToken = 'demo-guest-session-token';
+        localStorage.setItem('ytber_guest_token', guestToken);
+        headers['Authorization'] = `Bearer ${guestToken}`;
       }
     }
   } catch (e) {
     console.warn('Could not read auth session for API request:', e);
+    headers['Authorization'] = 'Bearer demo-guest-session-token';
   }
 
   return headers;
+}
+
+export interface ResearchFact {
+  statement: string;
+  source_name: string;
+  source_url: string;
+  fact_type: string;
+}
+
+export interface ResearchEntity {
+  name: string;
+  entity_type: string;
+  significance: string;
+  animated_representation: string;
+}
+
+export interface NarrativeStrategy {
+  hook_angle: string;
+  core_conflict: string;
+  climax_point: string;
+  takeaway_message: string;
+  pacing_guidelines: string;
+}
+
+export interface TopicResearchReport {
+  topic: string;
+  subject: string;
+  category: string;
+  target_audience: string;
+  context: string;
+  verified_facts: ResearchFact[];
+  key_entities: ResearchEntity[];
+  storytelling_angles: string[];
+  misconceptions: string[];
+  claims_needing_verification: string[];
+  narrative_strategy: NarrativeStrategy;
+  recommended_duration_sec: number;
+  recommended_style: string;
 }
 
 export interface AnalyzeScriptParams {
@@ -58,6 +102,44 @@ export interface TTSResponse {
   provider: string;
   sample_rate: number;
   format: string;
+}
+
+export interface GenerateMovieParams {
+  script_text: string;
+  genre?: string;
+  video_format?: 'short-form' | 'long-form';
+  voice?: string;
+  rate?: string;
+  pitch?: string;
+  visual_style?: string;
+}
+
+export interface FilmBlueprint {
+  title: string;
+  genre: string;
+  video_format: string;
+  aspect_ratio: string;
+  estimated_duration_seconds: number;
+  character_bible: Record<string, any>;
+  environment_bible: Record<string, any>;
+  dramatic_arc: string;
+  scenes: Array<{
+    scene_order: number;
+    scene_id: string;
+    scene_type: string;
+    narrative_stage: string;
+    narration_text: string;
+    estimated_duration: number;
+    visual_query: string;
+    visual_method: string;
+    visual_description: string;
+    camera_direction: string;
+    transition: string;
+    environment_setting: string;
+    ambient_profile: string;
+    sfx_cues: any[];
+    suggested_asset_keywords?: string[];
+  }>;
 }
 
 export const apiClient = {
@@ -108,6 +190,21 @@ export const apiClient = {
     return await res.json();
   },
 
+  // 2.1 AI Content Research & Narrative Intelligence
+  async researchTopic(topic: string, category?: string): Promise<TopicResearchReport> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/research/topic`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ topic, category: category || 'general' }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Nghiên cứu chủ đề thất bại (${res.status})`);
+    }
+    return await res.json();
+  },
+
   // 3. Asset Discovery
   async searchAssets(query: string, limit: number = 10): Promise<SceneAsset[]> {
     const headers = await getAuthHeaders();
@@ -124,13 +221,64 @@ export const apiClient = {
     return rawAssets.map((a) => ({
       id: a.asset_id,
       asset_type: a.media_type === 'video' ? 'video' : 'image',
-      source_url: a.full_url || a.preview_url,
+      source_url: a.download_url || a.full_url || a.preview_url,
       preview_url: a.preview_url,
-      full_url: a.full_url,
-      license_type: a.license_type || 'Public Domain',
-      author_name: a.author_name || 'Tác giả tư liệu',
+      full_url: a.download_url || a.full_url,
+      license_type: a.license || a.license_type || 'Public Domain',
+      author_name: a.creator || a.author_name || 'Tác giả tư liệu',
       attribution_text: a.attribution_text || `Ảnh: ${a.title}`,
     }));
+  },
+
+  async downloadAsset(asset: {
+    url: string;
+    title?: string;
+    provider?: string;
+    license_type?: string;
+    license_url?: string;
+    creator?: string;
+    attribution_required?: boolean;
+    attribution_text?: string;
+  }): Promise<SceneAsset> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/assets/download`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(asset),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Tải tư liệu thất bại (${res.status})`);
+    }
+
+    const data = await res.json();
+    return {
+      id: data.asset_id,
+      asset_type: data.media_type === 'video' ? 'video' : 'image',
+      source_url: asset.url,
+      local_url: data.local_url,
+      preview_url: data.local_url,
+      full_url: data.local_url,
+      license_type: data.license_type,
+      author_name: data.creator,
+      attribution_text: data.attribution_text,
+    };
+  },
+
+  async generateAttributionManifest(filenames: string[]): Promise<any> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/assets/attribution-manifest`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(filenames),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Tạo manifest bản quyền thất bại (${res.status})`);
+    }
+
+    return await res.json();
   },
 
   // 4. Voice Studio & Real Speech Synthesis
@@ -172,7 +320,11 @@ export const apiClient = {
       throw new Error(err.detail || `Lồng tiếng thất bại (${res.status})`);
     }
 
-    return await res.json();
+    const data: TTSResponse = await res.json();
+    if (data.audio_url && data.audio_url.startsWith('/') && rawBase) {
+      data.audio_url = `${rawBase.replace(/\/$/, '')}${data.audio_url}`;
+    }
+    return data;
   },
 
   // 5. Projects CRUD
@@ -234,5 +386,132 @@ export const apiClient = {
       throw new Error(`Lưu kịch bản phân cảnh thất bại (${res.status})`);
     }
     return await res.json();
+  },
+
+  // 6. Zero-Touch AI Movie Director (1-Click Full Production Pipeline)
+  async generateMovie(params: GenerateMovieParams): Promise<SceneManifest> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/director/generate-movie`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Sản xuất phim tự động thất bại (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async getFilmBlueprint(params: { script_text: string; genre?: string; video_format?: string }): Promise<FilmBlueprint> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/director/blueprint`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Tạo bản thiết kế phim thất bại (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  // 7. Soundscape Presets & SFX Search Engine
+  async fetchSoundscapePresets(): Promise<any[]> {
+    try {
+      const res = await fetch(`${API_BASE}/soundscape/presets`);
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('Could not fetch soundscape presets:', e);
+    }
+    return [];
+  },
+
+  async searchSFX(query: string = '', category?: string): Promise<any[]> {
+    const url = new URL(`${API_BASE}/soundscape/search`, window.location.origin);
+    if (query) url.searchParams.set('q', query);
+    if (category) url.searchParams.set('category', category);
+    const res = await fetch(url.toString().replace(window.location.origin, ''));
+    if (!res.ok) throw new Error(`Tìm kiếm âm thanh thất bại (${res.status})`);
+    return await res.json();
+  },
+
+  getSFXAudioUrl(sfxId: string): string {
+    return `${API_BASE}/soundscape/audio/${sfxId}`;
+  },
+
+  async autoEnrichSoundscape(manifest: any): Promise<any> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/soundscape/auto-enrich`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ manifest }),
+    });
+    if (!res.ok) throw new Error(`Tự động phối âm thanh thất bại (${res.status})`);
+    return await res.json();
+  },
+
+  // 8. VoiceStudio Integration & TTS Configuration
+  async fetchTTSSettings(): Promise<any> {
+    const res = await fetch(`${API_BASE}/tts/settings`);
+    if (!res.ok) throw new Error(`Lấy cấu hình TTS thất bại (${res.status})`);
+    return await res.json();
+  },
+
+  async updateTTSSettings(params: {
+    voicestudio_url?: string;
+    engine_mode?: string;
+    voicestudio_enabled?: boolean;
+    allow_offline_fallback?: boolean;
+  }): Promise<any> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/tts/settings`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) throw new Error(`Cập nhật cấu hình TTS thất bại (${res.status})`);
+    return await res.json();
+  },
+
+  async checkVoiceStudioStatus(): Promise<any> {
+    const res = await fetch(`${API_BASE}/tts/voicestudio/status`);
+    if (!res.ok) throw new Error(`Kiểm tra VoiceStudio thất bại (${res.status})`);
+    return await res.json();
+  },
+
+  // 9. HyperFrames Backend Video Rendering API
+  async startRender(manifest: any): Promise<{ job_id: string; status: string; stage_text: string }> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/render/start`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ manifest }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Khởi tạo tiến trình kết xuất video thất bại (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async getRenderStatus(jobId: string): Promise<{
+    job_id: string;
+    status: string;
+    progress_percent: number;
+    stage_text: string;
+    output_mp4_url?: string;
+    duration_seconds?: number;
+    file_size_bytes?: number;
+    error_message?: string;
+  }> {
+    const res = await fetch(`${API_BASE}/render/status/${jobId}`);
+    if (!res.ok) throw new Error(`Lấy trạng thái kết xuất thất bại (${res.status})`);
+    return await res.json();
+  },
+
+  getRenderDownloadUrl(jobId: string): string {
+    return `${API_BASE}/render/download/${jobId}`;
   },
 };

@@ -41,6 +41,13 @@ class ChapterCreateRequest(BaseModel):
     summary: Optional[str] = ""
     duration_seconds: Optional[float] = 60.0
 
+class ChapterUpdateRequest(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=255)
+    chapter_order: Optional[int] = Field(None, ge=1)
+    summary: Optional[str] = None
+    duration_seconds: Optional[float] = Field(None, ge=0.0)
+    status: Optional[str] = None
+
 class ManifestUpdateRequest(BaseModel):
     manifest_json: Dict[str, Any]
 
@@ -297,3 +304,63 @@ async def create_episode_chapter(
     await db.commit()
     await db.refresh(chapter)
     return chapter.to_dict()
+
+@episode_manifest_router.put("/{episode_id}/chapters/{chapter_id}", response_model=Dict[str, Any])
+async def update_episode_chapter(
+    episode_id: str,
+    chapter_id: str,
+    req: ChapterUpdateRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update an existing chapter within an episode, enforcing ownership."""
+    stmt = select(EpisodeModel).where(EpisodeModel.id == episode_id)
+    result = await db.execute(stmt)
+    ep = result.scalar_one_or_none()
+    if not ep or ep.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Episode not found")
+
+    ch_stmt = select(ChapterModel).where(ChapterModel.id == chapter_id, ChapterModel.episode_id == episode_id)
+    ch_res = await db.execute(ch_stmt)
+    chapter = ch_res.scalar_one_or_none()
+    if not chapter:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chapter not found")
+
+    if req.title is not None:
+        chapter.title = req.title
+    if req.summary is not None:
+        chapter.summary = req.summary
+    if req.duration_seconds is not None:
+        chapter.duration_seconds = req.duration_seconds
+    if req.chapter_order is not None:
+        chapter.chapter_order = req.chapter_order
+    if req.status is not None:
+        chapter.status = req.status
+
+    await db.commit()
+    await db.refresh(chapter)
+    return chapter.to_dict()
+
+@episode_manifest_router.delete("/{episode_id}/chapters/{chapter_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_episode_chapter(
+    episode_id: str,
+    chapter_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a chapter from an episode, enforcing ownership."""
+    stmt = select(EpisodeModel).where(EpisodeModel.id == episode_id)
+    result = await db.execute(stmt)
+    ep = result.scalar_one_or_none()
+    if not ep or ep.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Episode not found")
+
+    ch_stmt = select(ChapterModel).where(ChapterModel.id == chapter_id, ChapterModel.episode_id == episode_id)
+    ch_res = await db.execute(ch_stmt)
+    chapter = ch_res.scalar_one_or_none()
+    if not chapter:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chapter not found")
+
+    await db.delete(chapter)
+    await db.commit()
+    return None

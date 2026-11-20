@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { RemotionPlayer } from '../components/video/RemotionPlayer';
 import { StoryboardEditor } from '../components/storyboard/StoryboardEditor';
 import { RenderModal } from '../components/video/RenderModal';
-import { apiClient } from '../services/apiClient';
+import { apiClient, getAuthHeaders } from '../services/apiClient';
 import type { SceneManifest, SceneItem, Project, GenreInfo, VoiceInfo } from '../types/database';
 import { 
-  Sparkles, Play, ArrowLeft, Save, Sliders, Volume2, Mic, Film, Check, BookOpen, Layers, Music, Headphones
+  Sparkles, Play, ArrowLeft, Save, Sliders, Volume2, Mic, Film, Check, BookOpen, Layers, Music, Headphones, Image as ImageIcon,
+  Search, ExternalLink, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 const DEFAULT_SCRIPT = `Bạn có biết rằng, cách đây hơn 70 năm, tại một thung lũng lòng chảo ở Tây Bắc, quân và dân Việt Nam đã làm nên một kỳ tích chấn động địa cầu? Đó chính là chiến thắng Điện Biên Phủ lịch sử năm 1954. Dưới sự chỉ huy tài ba của Đại tướng Võ Nguyên Giáp, toàn quân ta đã kiên cường vượt mọi gian khổ, kéo pháo qua đèo cao, bạt núi mở đường để làm nên chiến công hiển hách lừng lẫy năm châu. Ngày 7 tháng 5 năm 1954, lá cờ Quyết chiến Quyết thắng tung bay trên nóc hầm De Castries, đánh dấu mốc son chói lọi trong lịch sử dân tộc! Hãy bấm đăng ký kênh để đón xem những câu chuyện lịch sử tự hào tiếp theo!`;
@@ -24,12 +25,65 @@ export const ScriptStudioPage: React.FC = () => {
   const [voiceVoice, setVoiceVoice] = useState('vi-VN-NamMinhNeural');
   const [voiceRate, setVoiceRate] = useState('+0%');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isGeneratingMovie, setIsGeneratingMovie] = useState(false);
   const [isSynthesizingVoice, setIsSynthesizingVoice] = useState(false);
+  const [isDiscoveringAssets, setIsDiscoveringAssets] = useState(false);
   const [isVoiceTesting, setIsVoiceTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeSceneIndex, setActiveSceneIndex] = useState(0);
   const [showRenderModal, setShowRenderModal] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // VoiceStudio Settings Modal State
+  const [showVoiceStudioModal, setShowVoiceStudioModal] = useState(false);
+  const [voiceStudioUrl, setVoiceStudioUrl] = useState('http://127.0.0.1:3900');
+  const [engineMode, setEngineMode] = useState<'auto' | 'voicestudio' | 'edgetts'>('auto');
+  const [voiceStudioOnline, setVoiceStudioOnline] = useState<boolean | null>(null);
+  const [isCheckingVS, setIsCheckingVS] = useState(false);
+
+  useEffect(() => {
+    apiClient.fetchTTSSettings().then(res => {
+      if (res.voicestudio_url) setVoiceStudioUrl(res.voicestudio_url);
+      if (res.engine_mode) setEngineMode(res.engine_mode);
+      setVoiceStudioOnline(res.voicestudio_online);
+    }).catch(err => console.warn('Could not load TTS settings:', err));
+  }, []);
+
+  const handleCheckVoiceStudio = async () => {
+    setIsCheckingVS(true);
+    try {
+      const res = await apiClient.checkVoiceStudioStatus();
+      setVoiceStudioOnline(res.online);
+      setNotice(res.online ? '🟢 VoiceStudio đang hoạt động trực tuyến!' : '🟡 VoiceStudio chưa mở (hệ thống tự động dùng Edge-TTS)');
+    } catch (e: any) {
+      setVoiceStudioOnline(false);
+      setNotice('🟡 Không thể kết nối VoiceStudio (dùng Edge-TTS tự động)');
+    } finally {
+      setIsCheckingVS(false);
+      setTimeout(() => setNotice(null), 3500);
+    }
+  };
+
+  const handleSaveVoiceStudioSettings = async () => {
+    try {
+      await apiClient.updateTTSSettings({
+        voicestudio_url: voiceStudioUrl,
+        engine_mode: engineMode,
+      });
+      setNotice('Đã lưu cấu hình VoiceStudio thành công!');
+      setShowVoiceStudioModal(false);
+    } catch (e: any) {
+      setNotice(`Lỗi lưu cấu hình: ${e.message}`);
+    } finally {
+      setTimeout(() => setNotice(null), 3000);
+    }
+  };
+
+  // Research State
+  const [topicQuery, setTopicQuery] = useState('Chiến thắng Điện Biên Phủ 1954');
+  const [isResearching, setIsResearching] = useState(false);
+  const [researchReport, setResearchReport] = useState<any | null>(null);
+  const [showResearchCard, setShowResearchCard] = useState(false);
 
   // Initial manifest
   const [manifest, setManifest] = useState<SceneManifest>({
@@ -62,18 +116,10 @@ export const ScriptStudioPage: React.FC = () => {
         duration_seconds: 7.5,
         start_frame: 0,
         end_frame: 225,
-        visual_method: 'archival',
+        visual_method: 'map',
         visual_config: {},
         subtitles_json: [],
-        assets: [
-          {
-            asset_type: 'image',
-            source_url: 'https://images.unsplash.com/photo-1528127269322-539801943592?auto=format&fit=crop&w=1080&q=80',
-            license_type: 'Public Domain',
-            author_name: 'Archival Collection',
-            attribution_text: 'Tư liệu lịch sử Việt Nam',
-          }
-        ],
+        assets: [],
       },
       {
         scene_order: 2,
@@ -82,7 +128,7 @@ export const ScriptStudioPage: React.FC = () => {
         duration_seconds: 9.0,
         start_frame: 225,
         end_frame: 495,
-        visual_method: 'photo',
+        visual_method: 'toon',
         visual_config: {},
         subtitles_json: [],
         assets: [],
@@ -94,7 +140,7 @@ export const ScriptStudioPage: React.FC = () => {
         duration_seconds: 8.5,
         start_frame: 495,
         end_frame: 750,
-        visual_method: 'procedural',
+        visual_method: 'toon',
         visual_config: {},
         subtitles_json: [],
         assets: [],
@@ -106,7 +152,7 @@ export const ScriptStudioPage: React.FC = () => {
         duration_seconds: 9.5,
         start_frame: 750,
         end_frame: 1035,
-        visual_method: 'archival',
+        visual_method: 'toon',
         visual_config: {},
         subtitles_json: [],
         assets: [],
@@ -270,6 +316,35 @@ export const ScriptStudioPage: React.FC = () => {
     }
   };
 
+  const handleZeroTouchGenerateMovie = async () => {
+    if (!scriptText.trim()) return;
+    setIsGeneratingMovie(true);
+    setNotice('🎬 Zero-Touch AI Studio: Đang đạo diễn kịch bản, tạo giọng AI & phối âm...');
+
+    try {
+      const generatedManifest = await apiClient.generateMovie({
+        script_text: scriptText,
+        genre: selectedGenre,
+        video_format: videoFormat,
+        voice: voiceVoice,
+        rate: voiceRate,
+      });
+
+      setManifest(generatedManifest);
+      setActiveSceneIndex(0);
+      setNotice(`🎬 Đạo diễn thành công ${generatedManifest.scenes.length} cảnh! Đang chuyển tiếp sang động cơ kết xuất HyperFrames...`);
+      
+      // Automatically trigger HyperFrames rendering modal
+      setShowRenderModal(true);
+    } catch (err: any) {
+      console.error('Error generating movie:', err);
+      setNotice(`Lỗi tạo phim tự động: ${err?.message || 'Vui lòng thử lại'}`);
+    } finally {
+      setIsGeneratingMovie(false);
+      setTimeout(() => setNotice(null), 5000);
+    }
+  };
+
   const handleTestVoice = async () => {
     setIsVoiceTesting(true);
     try {
@@ -280,7 +355,16 @@ export const ScriptStudioPage: React.FC = () => {
         rate: voiceRate,
       });
 
-      const audio = new Audio(tts.audio_url);
+      // Fetch with auth headers and play via local blob URL for 100% reliable browser preview
+      const headers = await getAuthHeaders();
+      const res = await fetch(tts.audio_url, { headers });
+      if (!res.ok) {
+        throw new Error(`Không thể phát âm thanh xem trước (Mã lỗi ${res.status})`);
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const audio = new Audio(blobUrl);
+      audio.onended = () => URL.revokeObjectURL(blobUrl);
       await audio.play();
       setNotice('Đang phát giọng đọc thử nghiệm chất lượng cao...');
     } catch (err: any) {
@@ -349,6 +433,61 @@ export const ScriptStudioPage: React.FC = () => {
     }
   };
 
+  const handleAutoDiscoverAssets = async () => {
+    setIsDiscoveringAssets(true);
+    setNotice('Đang tự động tìm kiếm và tải tư liệu thực từ Wikimedia & Openverse...');
+
+    try {
+      const updatedScenes = [...manifest.scenes];
+      let matchedCount = 0;
+
+      for (let i = 0; i < updatedScenes.length; i++) {
+        const scene = updatedScenes[i];
+        if (scene.assets?.[0]?.local_url) continue;
+
+        const query =
+          (scene as any).search_keywords?.[0] ||
+          (scene as any).suggested_asset_keywords?.[0] ||
+          scene.visual_description?.split(' ')[0] ||
+          'Vietnam archival photography';
+
+        try {
+          const results = await apiClient.searchAssets(query, 5);
+          if (results.length > 0) {
+            const topAsset = results[0];
+            const downloaded = await apiClient.downloadAsset({
+              url: topAsset.source_url,
+              title: topAsset.attribution_text?.replace('Ảnh: ', '') || query,
+              creator: topAsset.author_name,
+              license_type: topAsset.license_type,
+              attribution_text: topAsset.attribution_text,
+            });
+
+            updatedScenes[i] = {
+              ...scene,
+              assets: [downloaded],
+              visual_config: { ...scene.visual_config, imageUrl: downloaded.local_url }
+            };
+            matchedCount++;
+          }
+        } catch (err) {
+          console.warn(`Lỗi tìm tư liệu cảnh ${i + 1}:`, err);
+        }
+      }
+
+      setManifest(prev => ({
+        ...prev,
+        scenes: updatedScenes,
+      }));
+      setNotice(`Đã tìm kiếm và ghép thành công tư liệu thực cho ${matchedCount} cảnh!`);
+    } catch (err: any) {
+      setNotice(`Lỗi tìm tư liệu tự động: ${err.message}`);
+    } finally {
+      setIsDiscoveringAssets(false);
+      setTimeout(() => setNotice(null), 3500);
+    }
+  };
+
   const handleSaveProject = async () => {
     setIsSaving(true);
     try {
@@ -362,6 +501,33 @@ export const ScriptStudioPage: React.FC = () => {
       setIsSaving(false);
       setTimeout(() => setNotice(null), 2500);
     }
+  };
+
+  const handleResearchTopic = async () => {
+    if (!topicQuery.trim()) return;
+    setIsResearching(true);
+    setNotice('Đang tổng hợp thông tin, xác thực nguồn dẫn & lập chiến lược kịch bản...');
+    try {
+      const report = await apiClient.researchTopic(topicQuery, selectedGenre);
+      setResearchReport(report);
+      setShowResearchCard(true);
+      setNotice(`Đã hoàn tất nghiên cứu chuyên sâu cho chủ đề: ${report.topic}`);
+    } catch (err: any) {
+      setNotice(`Lỗi nghiên cứu chủ đề: ${err.message}`);
+    } finally {
+      setIsResearching(false);
+      setTimeout(() => setNotice(null), 3500);
+    }
+  };
+
+  const handleApplyResearchToScript = () => {
+    if (!researchReport) return;
+    const factsSummary = (researchReport.verified_facts || []).map((f: any) => f.claim).join('. ');
+    const hook = researchReport.narrative_strategy?.hook_angle || '';
+    const newScript = `${hook} ${factsSummary} Hãy nhấn đăng ký kênh để khám phá thêm những câu chuyện hấp dẫn tiếp theo!`;
+    setScriptText(newScript);
+    setNotice('Đã cập nhật kịch bản theo dữ liệu nghiên cứu chuyên sâu!');
+    setTimeout(() => setNotice(null), 3000);
   };
 
   return (
@@ -399,6 +565,25 @@ export const ScriptStudioPage: React.FC = () => {
           )}
 
           <button
+            onClick={handleZeroTouchGenerateMovie}
+            disabled={isGeneratingMovie}
+            className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs font-extrabold px-4 py-2 rounded-xl shadow-lg transition hover:scale-105 border border-emerald-400/40"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+            <span>{isGeneratingMovie ? 'Đang tạo phim tự động...' : '🎬 Tạo Phim Tự Động (Zero-Touch AI)'}</span>
+          </button>
+
+          <button
+            onClick={() => setShowVoiceStudioModal(true)}
+            className="flex items-center gap-1.5 bg-studio-card hover:bg-studio-border text-emerald-300 text-xs font-semibold px-3 py-2 rounded-xl transition border border-emerald-500/30 shadow-sm"
+            title="Cấu hình VoiceStudio & Lồng tiếng AI"
+          >
+            <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+            <span>⚙️ VoiceStudio</span>
+            <span className={`w-2 h-2 rounded-full ${voiceStudioOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+          </button>
+
+          <button
             onClick={handleSaveProject}
             disabled={isSaving}
             className="flex items-center gap-1.5 bg-studio-card hover:bg-studio-border text-gray-200 text-xs font-semibold px-3.5 py-2 rounded-xl transition border border-studio-border"
@@ -409,18 +594,100 @@ export const ScriptStudioPage: React.FC = () => {
 
           <button
             onClick={() => setShowRenderModal(true)}
-            className="flex items-center gap-2 bg-gradient-to-r from-studio-primary to-indigo-600 hover:from-indigo-500 hover:to-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg transition hover:scale-105"
+            className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg transition hover:scale-105 border border-emerald-400/40"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Kết Xuất MP4 (WebCodecs)</span>
+            <span>Kết Xuất MP4 (HyperFrames)</span>
           </button>
         </div>
       </header>
 
       {/* Main Studio Workspace */}
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 max-w-[1780px] w-full mx-auto">
-        {/* Left Column (4 cols): Script, Genre & Voice Settings */}
-        <section className="lg:col-span-4 flex flex-col gap-4">
+        {/* Left Column (4 cols): Research, Script, Genre, Voice & Affiliate Settings */}
+        <section className="lg:col-span-4 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-100px)] pr-1">
+          {/* AI Deep Research Engine Card */}
+          <div className="bg-studio-surface border border-studio-border rounded-2xl p-4 shadow-xl flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Search className="w-4 h-4 text-studio-accent" />
+                Nghiên Cứu Chủ Đề AI (Deep Research)
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowResearchCard(!showResearchCard)}
+                className="text-gray-400 hover:text-white text-xs flex items-center gap-1"
+              >
+                {showResearchCard ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={topicQuery}
+                onChange={(e) => setTopicQuery(e.target.value)}
+                placeholder="Nhập chủ đề cần nghiên cứu (vd: Chiến dịch Điện Biên Phủ, Vàng và Lạm phát)..."
+                className="flex-1 bg-studio-bg border border-studio-border rounded-xl px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-studio-primary font-medium"
+              />
+              <button
+                type="button"
+                onClick={handleResearchTopic}
+                disabled={isResearching}
+                className="px-3 py-2 bg-studio-accent/20 hover:bg-studio-accent/30 border border-studio-accent/40 text-studio-accent text-xs font-bold rounded-xl flex items-center gap-1.5 transition"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{isResearching ? 'Đang tra cứu...' : 'Nghiên cứu'}</span>
+              </button>
+            </div>
+
+            {/* Research Results Display */}
+            {researchReport && (
+              <div className="bg-studio-bg border border-studio-border/70 rounded-xl p-3 flex flex-col gap-2.5 text-xs">
+                <div className="flex items-center justify-between border-b border-studio-border/50 pb-1.5">
+                  <span className="font-semibold text-emerald-400 flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" /> Nguồn kiểm chứng & Thực thể
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleApplyResearchToScript}
+                    className="text-[11px] bg-studio-primary/20 text-studio-primary border border-studio-primary/30 px-2 py-0.5 rounded-md hover:bg-studio-primary hover:text-white transition"
+                  >
+                    Áp dụng vào Kịch Bản
+                  </button>
+                </div>
+
+                {/* Facts with URLs */}
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Sự kiện xác thực:</div>
+                  {(researchReport.verified_facts || []).map((fact: any, fIdx: number) => (
+                    <div key={fIdx} className="bg-studio-card/80 p-2 rounded-lg text-gray-300 text-[11px] leading-relaxed">
+                      <div className="font-medium text-white">{fact.claim}</div>
+                      {fact.source_url && (
+                        <a
+                          href={fact.source_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-studio-primary hover:underline flex items-center gap-1 mt-1 text-[10px]"
+                        >
+                          <ExternalLink className="w-2.5 h-2.5" /> {fact.source_name || 'Nguồn kiểm chứng'}
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Narrative Strategy Hook */}
+                {researchReport.narrative_strategy && (
+                  <div className="bg-amber-950/20 border border-amber-600/30 p-2 rounded-lg text-[11px] text-amber-200">
+                    <span className="font-bold">Mở đầu thu hút (Hook): </span>
+                    {researchReport.narrative_strategy.hook_angle}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Format & Genre Selection Card */}
           <div className="bg-studio-surface border border-studio-border rounded-2xl p-4 shadow-xl flex flex-col gap-3">
             <div className="flex items-center justify-between">
@@ -549,9 +816,34 @@ export const ScriptStudioPage: React.FC = () => {
             </div>
 
             <button
+              type="button"
+              onClick={handleAutoDiscoverAssets}
+              disabled={isDiscoveringAssets}
+              className="w-full py-2 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              <span>{isDiscoveringAssets ? 'Đang tìm & tải tư liệu hoạt họa...' : 'Tự Động Ghép Tư Liệu Hoạt Họa (100% Vector/Toon)'}</span>
+            </button>
+
+            {/* Zero-Touch 100% Automated Movie Creation */}
+            <button
+              type="button"
+              onClick={handleZeroTouchGenerateMovie}
+              disabled={isGeneratingMovie}
+              className="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 disabled:opacity-50 text-white font-extrabold rounded-xl shadow-xl flex items-center justify-center gap-2 transition hover:scale-[1.01] mt-1 text-xs border border-emerald-400/40"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+              <span>
+                {isGeneratingMovie
+                  ? 'Đang đạo diễn, lồng tiếng, tìm tư liệu & dựng phim tự động...'
+                  : '🎬 Tạo Phim Tự Động 100% (Zero-Touch AI Studio)'}
+              </span>
+            </button>
+
+            <button
               onClick={handleAnalyzeScript}
               disabled={isAnalyzing}
-              className="w-full py-3 bg-gradient-to-r from-studio-primary to-indigo-600 hover:from-indigo-500 hover:to-indigo-700 disabled:opacity-50 text-white font-bold rounded-xl shadow flex items-center justify-center gap-2 transition hover:scale-[1.01] mt-1 text-xs"
+              className="w-full py-2.5 bg-studio-card hover:bg-studio-border border border-studio-border disabled:opacity-50 text-gray-300 font-semibold rounded-xl shadow flex items-center justify-center gap-2 transition hover:scale-[1.01] text-xs"
             >
               <Sparkles className="w-4 h-4 text-studio-highlight" />
               <span>{isAnalyzing ? 'Đang phân tích kịch bản theo thể loại...' : 'Phân Tích Kịch Bản Bằng AI'}</span>
@@ -613,10 +905,10 @@ export const ScriptStudioPage: React.FC = () => {
             <div className="w-full mt-4 flex flex-col gap-2">
               <button
                 onClick={() => setShowRenderModal(true)}
-                className="w-full py-2.5 bg-studio-primary hover:bg-indigo-600 text-white font-bold rounded-xl shadow text-xs flex items-center justify-center gap-1.5 transition"
+                className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow text-xs flex items-center justify-center gap-1.5 transition"
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
-                Kết Xuất Video MP4 ({manifest.aspect_ratio})
+                Kết Xuất Video MP4 (HyperFrames Engine)
               </button>
             </div>
           </div>
@@ -629,6 +921,141 @@ export const ScriptStudioPage: React.FC = () => {
         isOpen={showRenderModal}
         onClose={() => setShowRenderModal(false)}
       />
+
+      {/* VoiceStudio & TTS Configuration Modal */}
+      {showVoiceStudioModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-studio-surface border border-studio-border rounded-2xl max-w-xl w-full p-6 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-studio-border pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Sliders className="w-5 h-5 text-emerald-400" />
+                  Cấu Hình VoiceStudio & Công Cụ Lồng Tiếng AI
+                </h3>
+                <p className="text-xs text-gray-400">Tích hợp thông minh bộ máy lồng tiếng nơ-ron miễn phí (debpalash/VoiceStudio)</p>
+              </div>
+              <button
+                onClick={() => setShowVoiceStudioModal(false)}
+                className="text-gray-400 hover:text-white p-1 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Live Connection Status Badge */}
+            <div className={`p-3.5 rounded-xl border flex items-center justify-between ${
+              voiceStudioOnline
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <span className={`w-3 h-3 rounded-full animate-pulse ${voiceStudioOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                <div>
+                  <h4 className="text-xs font-bold">
+                    {voiceStudioOnline ? 'VoiceStudio Đang Hoạt Động Trực Tuyến (Port 3900)' : 'VoiceStudio Chưa Chạy Cục Bộ'}
+                  </h4>
+                  <p className="text-[11px] opacity-80">
+                    {voiceStudioOnline
+                      ? 'Hệ thống đang ưu tiên tổng hợp giọng đọc nơ-ron qua VoiceStudio cục bộ.'
+                      : 'Hệ thống đang tự động chuyển tiếp mượt mà sang Microsoft Edge Neural TTS ($0).'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleCheckVoiceStudio}
+                disabled={isCheckingVS}
+                className="px-3 py-1.5 bg-studio-bg hover:bg-studio-border border border-studio-border rounded-lg text-xs font-semibold text-white transition flex-shrink-0"
+              >
+                {isCheckingVS ? 'Đang ping...' : 'Kiểm tra ping'}
+              </button>
+            </div>
+
+            {/* Engine Selection Mode */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-gray-200">Chế độ ưu tiên bộ máy tạo giọng (Engine Routing):</label>
+              <div className="grid grid-cols-1 gap-2">
+                {[
+                  {
+                    id: 'auto',
+                    title: '🚀 Tự động thông minh (Khuyên dùng)',
+                    desc: 'Ưu tiên VoiceStudio cục bộ nếu đang bật; tự động chuyển sang Edge-TTS nếu VoiceStudio tắt.'
+                  },
+                  {
+                    id: 'voicestudio',
+                    title: '🎙️ Chỉ VoiceStudio (debpalash/VoiceStudio)',
+                    desc: 'Bắt buộc chạy trên server VoiceStudio nội bộ trên máy bạn.'
+                  },
+                  {
+                    id: 'edgetts',
+                    title: '🌐 Trực tiếp Edge-TTS (Không cần cài thêm gì)',
+                    desc: 'Sử dụng trực tiếp giọng đọc nơ-ron Nam Minh / Hoài My tốc độ cao.'
+                  }
+                ].map(mode => (
+                  <label
+                    key={mode.id}
+                    onClick={() => setEngineMode(mode.id as any)}
+                    className={`p-3 rounded-xl border cursor-pointer transition flex items-start gap-3 ${
+                      engineMode === mode.id
+                        ? 'bg-studio-primary/10 border-studio-primary text-white'
+                        : 'bg-studio-bg border-studio-border text-gray-300 hover:border-gray-600'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="engine_mode"
+                      checked={engineMode === mode.id}
+                      onChange={() => setEngineMode(mode.id as any)}
+                      className="mt-1"
+                    />
+                    <div>
+                      <h5 className="text-xs font-bold text-white">{mode.title}</h5>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{mode.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* VoiceStudio Endpoint URL */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-gray-200">Địa chỉ VoiceStudio Server (HTTP Endpoint):</label>
+              <input
+                type="text"
+                value={voiceStudioUrl}
+                onChange={(e) => setVoiceStudioUrl(e.target.value)}
+                placeholder="http://127.0.0.1:3900"
+                className="bg-studio-bg border border-studio-border rounded-xl px-3.5 py-2 text-xs font-mono text-emerald-300 focus:outline-none focus:border-studio-primary"
+              />
+            </div>
+
+            {/* Step-by-Step Launch Guide */}
+            <div className="bg-studio-bg border border-studio-border rounded-xl p-3 flex flex-col gap-2">
+              <span className="text-[11px] font-bold text-gray-300 flex items-center gap-1.5">
+                📖 Lệnh khởi chạy debpalash/VoiceStudio (nếu muốn chạy cục bộ):
+              </span>
+              <pre className="bg-black/50 p-2.5 rounded-lg text-[10px] font-mono text-amber-300 overflow-x-auto border border-studio-border/50">
+git clone https://github.com/debpalash/VoiceStudio.git && cd VoiceStudio && python -m voicestudio --port 3900
+              </pre>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-studio-border">
+              <button
+                onClick={() => setShowVoiceStudioModal(false)}
+                className="px-4 py-2 bg-studio-card hover:bg-studio-border text-gray-300 text-xs font-semibold rounded-xl transition"
+              >
+                Đóng
+              </button>
+              <button
+                onClick={handleSaveVoiceStudioSettings}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow"
+              >
+                Lưu Cấu Hình
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

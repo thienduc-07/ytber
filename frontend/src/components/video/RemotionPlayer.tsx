@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import type { SceneManifest } from '../../types/database';
+import { AnimationEngine } from '../../services/animationEngine';
 import { Play, Pause, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 
 interface RemotionPlayerProps {
@@ -31,59 +32,121 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
     canvas.width = w;
     canvas.height = h;
 
-    // Find active scene
+    // Find active scene and local normalized progress
     let accumulatedTime = 0;
     let activeScene = manifest.scenes[0];
+    let localT = 0;
 
     for (const scene of manifest.scenes) {
       if (localTime >= accumulatedTime && localTime <= accumulatedTime + scene.duration_seconds) {
         activeScene = scene;
+        localT = (localTime - accumulatedTime) / Math.max(0.1, scene.duration_seconds);
         break;
       }
       accumulatedTime += scene.duration_seconds;
     }
 
-    // Render Preview Frame
-    const grad = ctx.createLinearGradient(0, 0, w, h);
-    if (manifest.genre === 'horror') {
-      grad.addColorStop(0, '#0a0a0f');
-      grad.addColorStop(1, '#020204');
-    } else if (manifest.genre === 'economics') {
-      grad.addColorStop(0, '#0f172a');
-      grad.addColorStop(1, '#020617');
-    } else {
-      grad.addColorStop(0, '#1c1c2b');
-      grad.addColorStop(1, '#0d0d12');
-    }
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-
-    // Visual modality indicator
-    ctx.fillStyle = manifest.genre === 'horror' ? '#EF4444' : '#FFB36B';
-    ctx.font = 'bold 44px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`CẢNH: ${activeScene?.scene_type?.toUpperCase() || 'NARRATIVE'}`, w / 2, h * 0.22);
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '32px sans-serif';
-    ctx.fillText(`Phương thức: ${activeScene?.visual_method?.toUpperCase() || 'PHOTO'}`, w / 2, h * 0.27);
-
-    // Subtitle card preview
     if (activeScene) {
-      ctx.fillStyle = 'rgba(0,0,0,0.8)';
-      const subY = h * 0.75;
-      const subH = Math.min(160, h * 0.15);
-      ctx.roundRect(w * 0.08, subY, w * 0.84, subH, 24);
-      ctx.fill();
+      // 1. Render Rich Temporal Animation (Parallax, Vector Characters, Maps, Infographics, Particles)
+      const isSpeaking = isPlaying && !!activeScene.narration_text;
+      AnimationEngine.renderScene(
+        ctx,
+        w,
+        h,
+        activeScene,
+        localT,
+        localTime,
+        manifest.character_registry,
+        isSpeaking
+      );
 
-      ctx.fillStyle = '#FFDF00';
-      ctx.font = 'bold 40px "Be Vietnam Pro", sans-serif';
-      const displayText = activeScene.narration_text.length > 50 
-        ? activeScene.narration_text.slice(0, 50) + '...'
-        : activeScene.narration_text;
-      ctx.fillText(displayText, w / 2, subY + subH * 0.6);
+      // 2. Render Ricks Clips 3000 Kinetic Pop Subtitles (Word-by-word bouncing karaoke)
+      const text = activeScene.narration_text?.trim() || '';
+      if (text) {
+        const words = text.split(/\s+/).filter(Boolean);
+        if (words.length > 0) {
+          // Calculate active word index from millisecond boundary cues
+          const cues = activeScene.subtitles_json || [];
+          const localMs = Math.round(localT * activeScene.duration_seconds * 1000);
+          let activeIdx = -1;
+          if (cues.length > 0) {
+            activeIdx = cues.findIndex((c: any) => localMs >= (c.start_ms || 0) && localMs <= (c.end_ms || 0));
+            if (activeIdx === -1) {
+              for (let i = cues.length - 1; i >= 0; i--) {
+                if (localMs >= (cues[i].start_ms || 0)) {
+                  activeIdx = i;
+                  break;
+                }
+              }
+            }
+          }
+          if (activeIdx === -1) {
+            activeIdx = Math.min(words.length - 1, Math.floor(localT * words.length));
+          }
+
+          // Chunk words into rapid 3-4 word phrases centered on screen
+          const wordsPerChunk = 4;
+          const chunkStart = Math.floor(activeIdx / wordsPerChunk) * wordsPerChunk;
+          const currentChunk = words.slice(chunkStart, chunkStart + wordsPerChunk);
+          const relActive = activeIdx - chunkStart;
+
+          // Position: Eye-level upper-middle for viral short-form retention
+          const subY = Math.round(h * 0.54);
+          const fontSize = Math.round(Math.min(w, h) * 0.058);
+
+          ctx.save();
+          ctx.font = `900 ${fontSize}px "Montserrat", "Impact", "Arial Black", sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+
+          const spaceW = ctx.measureText(' ').width;
+          const widths = currentChunk.map(wd => ctx.measureText(wd.toUpperCase()).width);
+          const totalW = widths.reduce((a, b) => a + b, 0) + (currentChunk.length - 1) * spaceW;
+
+          let curX = (w - totalW) / 2;
+
+          for (let idx = 0; idx < currentChunk.length; idx++) {
+            const wd = currentChunk[idx].toUpperCase();
+            const isAct = idx === relActive;
+            const wordW = widths[idx];
+
+            ctx.save();
+            if (isAct) {
+              // Ricks Clips Signature Kinetic Pop bounce (scale 1.15x)
+              const cx = curX + wordW / 2;
+              const cy = subY;
+              ctx.translate(cx, cy);
+              ctx.scale(1.15, 1.15);
+              ctx.translate(-cx, -cy);
+
+              ctx.shadowColor = '#FACC15';
+              ctx.shadowBlur = 18;
+            } else {
+              ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+              ctx.shadowBlur = 12;
+              ctx.shadowOffsetX = 0;
+              ctx.shadowOffsetY = 4;
+            }
+
+            // Heavy Solid Black Outline Stroke
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = Math.round(fontSize * 0.22);
+            ctx.lineJoin = 'round';
+            ctx.miterLimit = 2;
+            ctx.strokeText(wd, curX, subY);
+
+            // Active word highlighted in bright yellow (#FACC15), inactive in white (#FFFFFF)
+            ctx.fillStyle = isAct ? '#FACC15' : '#FFFFFF';
+            ctx.fillText(wd, curX, subY);
+            ctx.restore();
+
+            curX += wordW + spaceW;
+          }
+          ctx.restore();
+        }
+      }
     }
-  }, [localTime, manifest]);
+  }, [localTime, manifest, isPlaying]);
 
   // Animation playback loop
   useEffect(() => {
@@ -110,13 +173,13 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
   }, [isPlaying, totalDuration, onTimeUpdate]);
 
   return (
-    <div className="flex flex-col items-center bg-studio-surface border border-studio-border rounded-2xl p-4 shadow-2xl">
-      {/* 9:16 Portrait Canvas Preview */}
-      <div className="relative aspect-[9/16] w-full max-w-[320px] bg-black rounded-xl overflow-hidden shadow-inner border border-studio-border">
+    <div className="flex flex-col items-center bg-studio-surface border border-studio-border rounded-2xl p-4 shadow-2xl w-full">
+      {/* Dynamic Aspect Ratio Canvas Preview (9:16 Shorts vs 16:9 Long-Form) */}
+      <div className={`relative ${manifest.video_format === 'long-form' ? 'aspect-[16/9] max-w-[420px]' : 'aspect-[9/16] max-w-[300px]'} w-full bg-black rounded-xl overflow-hidden shadow-inner border border-studio-border`}>
         <canvas
           ref={canvasRef}
-          width={1080}
-          height={1920}
+          width={manifest.video_specs?.width || 1080}
+          height={manifest.video_specs?.height || 1920}
           className="w-full h-full object-contain"
         />
         {/* Play overlay button when paused */}

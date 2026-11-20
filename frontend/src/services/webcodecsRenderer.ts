@@ -1,5 +1,8 @@
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
-import type { SceneManifest, SceneItem } from '../types/database';
+import type { SceneManifest, SceneItem, SubtitleItem } from '../types/database';
+import { AnimationEngine } from './animationEngine';
+import { SoundDesignEngine } from './soundDesignEngine';
+import { getAuthHeaders } from './apiClient';
 
 export interface RenderProgressEvent {
   percent: number;
@@ -23,6 +26,112 @@ export class WebCodecsRenderer {
 
   public cancel() {
     this.cancelled = true;
+  }
+
+  /**
+   * Preloads and decodes image assets with createImageBitmap
+   */
+  private async preloadSceneAssets(
+    manifest: SceneManifest,
+    onProgress?: (status: string) => void
+  ): Promise<Map<number, ImageBitmap | null>> {
+    const bitmaps = new Map<number, ImageBitmap | null>();
+
+    for (let i = 0; i < manifest.scenes.length; i++) {
+      if (this.cancelled) break;
+      const scene = manifest.scenes[i];
+      const assetUrl =
+        scene.assets?.[0]?.local_url ||
+        scene.assets?.[0]?.source_url ||
+        scene.assets?.[0]?.preview_url ||
+        scene.visual_config?.imageUrl;
+
+      if (assetUrl) {
+        if (onProgress) {
+          onProgress(`Đang tải và giải mã hình ảnh cảnh ${i + 1}/${manifest.scenes.length}...`);
+        }
+        try {
+          const res = await fetch(assetUrl, { mode: 'cors' });
+          if (res.ok) {
+            const blob = await res.blob();
+            // Verify blob is an image
+            if (blob.type.startsWith('image/') || blob.size > 0) {
+              const bmp = await createImageBitmap(blob);
+              bitmaps.set(i, bmp);
+              continue;
+            }
+          }
+        } catch (err) {
+          console.warn(`Could not preload asset image for scene ${i + 1} (${assetUrl}):`, err);
+        }
+      }
+      bitmaps.set(i, null);
+    }
+
+    return bitmaps;
+  }
+
+  /**
+   * Preloads and decodes actual audio files into PCM AudioBuffers.
+   * Strictly enforces real speech availability: fails if narration audio cannot be loaded.
+   */
+  private async preloadAudioBuffers(
+    manifest: SceneManifest,
+    audioCtx: AudioContext,
+    onProgress?: (status: string) => void
+  ): Promise<Map<number, AudioBuffer | null>> {
+    const buffers = new Map<number, AudioBuffer | null>();
+    const authHeaders = await getAuthHeaders();
+
+    for (let i = 0; i < manifest.scenes.length; i++) {
+      if (this.cancelled) break;
+      const scene = manifest.scenes[i];
+      const audioUrl = scene.audio_url;
+
+      if (audioUrl) {
+        if (onProgress) {
+          onProgress(`Đang nạp giọng đọc AI cảnh ${i + 1}/${manifest.scenes.length}...`);
+        }
+        try {
+          const res = await fetch(audioUrl, { headers: authHeaders });
+          if (res.ok) {
+            const arrayBuf = await res.arrayBuffer();
+            if (arrayBuf.byteLength < 100) {
+              throw new Error(`Tệp âm thanh cảnh ${i + 1} quá nhỏ hoặc rỗng (${arrayBuf.byteLength} bytes)`);
+            }
+            const decoded = await audioCtx.decodeAudioData(arrayBuf);
+            if (decoded.length === 0 || decoded.duration < 0.1) {
+              throw new Error(`Tệp âm thanh cảnh ${i + 1} không chứa tín hiệu giọng đọc hợp lệ`);
+            }
+            buffers.set(i, decoded);
+            continue;
+          } else {
+            throw new Error(`Máy chủ từ chối tải tệp âm thanh (Mã lỗi HTTP ${res.status})`);
+          }
+        } catch (err: any) {
+          console.error(`Không thể giải mã tệp âm thanh cảnh ${i + 1} (${audioUrl}):`, err);
+          throw new Error(`Lỗi tải giọng đọc cảnh ${i + 1}: ${err.message}. Yêu cầu phải có giọng đọc thực tế để sản xuất video.`);
+        }
+      } else if (scene.narration_text && scene.narration_text.trim().length > 10) {
+        throw new Error(`Cảnh ${i + 1} có lời thoại nhưng chưa được lồng tiếng. Vui lòng bấm 'Lồng Tiếng Các Cảnh' trước khi kết xuất.`);
+      }
+
+      buffers.set(i, null);
+    }
+
+    return buffers;
+  }
+
+  /**
+   * Determines whether character is speaking at local normalized scene time (localT: 0..1)
+   */
+  private isSpeechActiveAt(scene: SceneItem, localT: number): boolean {
+    const currentSec = localT * scene.duration_seconds;
+    if (scene.subtitles_json && scene.subtitles_json.length > 0) {
+      const currentMs = currentSec * 1000;
+      return scene.subtitles_json.some((c) => currentMs >= c.start_ms - 50 && currentMs <= c.end_ms + 50);
+    }
+    return !!scene.audio_url && localT <= 0.85;
   }
 
   public async renderVideo(
@@ -56,6 +165,55 @@ export class WebCodecsRenderer {
     canvas.height = height;
     const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     if (!ctx) throw new Error('Could not acquire 2D canvas context');
+
+    // Preload Real Media Assets and Audio
+    if (onProgress) {
+      onProgress({
+        percent: 2,
+        currentFrame: 0,
+        totalFrames: totalFrames,
+        effectiveFps: 0,
+        estimatedRemainingSec: 0,
+        statusText: 'Đang chuẩn bị và nạp trước tư liệu hình ảnh...',
+      });
+    }
+
+    const preloadedBitmaps = await this.preloadSceneAssets(manifest, (statusText) => {
+      if (onProgress) {
+        onProgress({
+          percent: 5,
+          currentFrame: 0,
+          totalFrames: totalFrames,
+          effectiveFps: 0,
+          estimatedRemainingSec: 0,
+          statusText,
+        });
+      }
+    });
+
+    // Audio Context for PCM decoding
+    let audioCtx: AudioContext | null = null;
+    let preloadedAudios = new Map<number, AudioBuffer | null>();
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        audioCtx = new AudioContextClass({ sampleRate: 48000 });
+        preloadedAudios = await this.preloadAudioBuffers(manifest, audioCtx, (statusText) => {
+          if (onProgress) {
+            onProgress({
+              percent: 8,
+              currentFrame: 0,
+              totalFrames: totalFrames,
+              effectiveFps: 0,
+              estimatedRemainingSec: 0,
+              statusText,
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Web Audio Context initialization warning:', e);
+    }
 
     // Setup MP4 Muxer with Fast Start (in-memory) for video & audio tracks
     const muxer = new Muxer({
@@ -149,31 +307,45 @@ export class WebCodecsRenderer {
       });
       audioEncoder.configure(audioConfig);
 
-      // 1. Generate & Encode Audio Stems with dynamic ducking
-      // Note: This is procedural ambient/synth BGM bed for preview/PoC testing, not final voice-over
+      // 1. Synthesize Complete 3-Layer Audio (Narration Speech + Dynamic BGM Bed + SFX Cues)
+      if (onProgress) {
+        onProgress({
+          percent: 5,
+          currentFrame: 0,
+          totalFrames: totalFrames,
+          effectiveFps: 0,
+          estimatedRemainingSec: 0,
+          statusText: 'Đang phối âm 3 lớp (Thuyết minh + Nhạc nền BGM + Hiệu ứng SFX)...',
+        });
+      }
+
+      const interleavedAudio = await SoundDesignEngine.synthesizeCompleteAudio(
+        manifest,
+        preloadedAudios,
+        totalAudioSamples,
+        fps,
+        (p) => {
+          if (onProgress) {
+            onProgress({
+              percent: Math.round(5 + (p.percent / 100) * 10),
+              currentFrame: 0,
+              totalFrames: totalFrames,
+              effectiveFps: 0,
+              estimatedRemainingSec: 0,
+              statusText: p.status,
+            });
+          }
+        }
+      );
+
+      // Encode audio chunks (48000 stereo sample frames at a time)
       let samplesProcessed = 0;
       while (samplesProcessed < totalAudioSamples) {
-        if (this.cancelled) {
-          throw new Error('Video rendering was cancelled');
-        }
-        if (encodingError) {
-          throw encodingError;
-        }
+        if (this.cancelled) throw new Error('Video rendering was cancelled');
+        if (encodingError) throw encodingError;
 
         const chunkSize = Math.min(48000, totalAudioSamples - samplesProcessed);
-        const pcm = new Float32Array(chunkSize * 2);
-
-        for (let i = 0; i < chunkSize; i++) {
-          const globalSampleIdx = samplesProcessed + i;
-          const t = globalSampleIdx / sampleRate;
-
-          // Synthesize rhythmic BGM bed (march / tension chord)
-          const bass = Math.sin(2 * Math.PI * 110 * t) * 0.12;
-          const rhythm = Math.sin(2 * Math.PI * 2 * t) > 0.8 ? 0.08 : 0.0;
-          const sample = bass + rhythm;
-          pcm[i * 2] = sample;
-          pcm[i * 2 + 1] = sample;
-        }
+        const pcmInterleaved = interleavedAudio.subarray(samplesProcessed * 2, (samplesProcessed + chunkSize) * 2);
 
         const timestampMicro = Math.round((samplesProcessed * 1_000_000) / sampleRate);
         const audioData = new (window as any).AudioData({
@@ -182,7 +354,7 @@ export class WebCodecsRenderer {
           numberOfFrames: chunkSize,
           numberOfChannels: 2,
           timestamp: timestampMicro,
-          data: pcm,
+          data: pcmInterleaved,
         });
 
         audioEncoder.encode(audioData);
@@ -193,11 +365,13 @@ export class WebCodecsRenderer {
 
       const startTime = performance.now();
 
-      // 2. Render & Encode Visual Frames
+      // 2. Render & Encode Visual Frames with 100% Animated Visuals & Synchronized Subtitles
       let sceneStartFrame = 0;
       for (let sIdx = 0; sIdx < manifest.scenes.length; sIdx++) {
         const scene = manifest.scenes[sIdx];
         const sceneFrames = sceneFrameCounts[sIdx];
+        const currentBmp = preloadedBitmaps.get(sIdx);
+        const nextBmp = sIdx + 1 < manifest.scenes.length ? preloadedBitmaps.get(sIdx + 1) : null;
 
         for (let f = 0; f < sceneFrames; f++) {
           if (this.cancelled) {
@@ -211,10 +385,43 @@ export class WebCodecsRenderer {
           const globalT = globalFrame / fps;
           const localT = f / sceneFrames;
 
-          // Render visual layer
-          this.renderSceneVisuals(ctx, width, height, scene, localT, globalT);
+          // Render 100% Animated Visuals (Parallax, Characters, Maps, Infographics, Particles)
+          const isSpeaking = this.isSpeechActiveAt(scene, localT);
+          AnimationEngine.renderScene(
+            ctx,
+            width,
+            height,
+            scene,
+            localT,
+            globalT,
+            manifest.character_registry,
+            isSpeaking,
+            currentBmp
+          );
 
-          // Render animated Vietnamese subtitles
+          // Scene Transition (Crossfade in last 15 frames if dissolve/fade)
+          const transitionFrames = 15;
+          const framesRemaining = sceneFrames - f;
+          if (framesRemaining <= transitionFrames && sIdx + 1 < manifest.scenes.length && scene.transition !== 'cut') {
+            const nextScene = manifest.scenes[sIdx + 1];
+            const blendAlpha = (transitionFrames - framesRemaining) / transitionFrames;
+            ctx.save();
+            ctx.globalAlpha = Math.min(1.0, Math.max(0.0, blendAlpha));
+            AnimationEngine.renderScene(
+              ctx,
+              width,
+              height,
+              nextScene,
+              0,
+              globalT,
+              manifest.character_registry,
+              false,
+              nextBmp
+            );
+            ctx.restore();
+          }
+
+          // Render Animated Vietnamese Karaoke Subtitles (Synced with Phase 2 Word Boundaries)
           this.renderSubtitles(ctx, width, height, scene, localT);
 
           // Create and encode VideoFrame
@@ -254,7 +461,7 @@ export class WebCodecsRenderer {
               totalFrames: totalFrames,
               effectiveFps: Math.round(currentFps),
               estimatedRemainingSec: Math.round(estRemaining),
-              statusText: `Đang kết xuất khung hình ${globalFrame + 1}/${totalFrames} (Cảnh: ${scene.scene_type})`,
+              statusText: `Đang kết xuất hoạt hình ${globalFrame + 1}/${totalFrames} (Cảnh ${scene.scene_order}: ${scene.visual_method || 'Hoạt hình 2D'})`,
             });
           }
         }
@@ -298,7 +505,7 @@ export class WebCodecsRenderer {
           totalFrames: totalFrames,
           effectiveFps: Math.round(finalFps),
           estimatedRemainingSec: 0,
-          statusText: 'Hoàn tất kết xuất video MP4!',
+          statusText: 'Hoàn tất kết xuất video MP4 với hình ảnh và âm thanh thực!',
         });
       }
 
@@ -310,18 +517,35 @@ export class WebCodecsRenderer {
         fileSizeBytes: outputBlob.size,
       };
     } finally {
+      // Clean up ImageBitmap resources to prevent memory leaks
+      preloadedBitmaps.forEach((bmp) => {
+        if (bmp) {
+          try {
+            bmp.close();
+          } catch {
+            // ignore
+          }
+        }
+      });
+      if (audioCtx && audioCtx.state !== 'closed') {
+        try {
+          audioCtx.close();
+        } catch {
+          // ignore
+        }
+      }
       if (videoEncoder && videoEncoder.state !== 'closed') {
         try {
           videoEncoder.close();
         } catch {
-          // ignore already closed
+          // ignore
         }
       }
       if (audioEncoder && audioEncoder.state !== 'closed') {
         try {
           audioEncoder.close();
         } catch {
-          // ignore already closed
+          // ignore
         }
       }
       canvas.width = 0;
@@ -329,119 +553,11 @@ export class WebCodecsRenderer {
     }
   }
 
-  private renderSceneVisuals(
-    ctx: CanvasRenderingContext2D,
-    w: number,
-    h: number,
-    scene: SceneItem,
-    t: number,
-    globalT: number
-  ) {
-    // Background gradient conforming to Day / Tension color system
-    const grad = ctx.createLinearGradient(0, 0, w, h);
-    if (scene.visual_method === 'archival') {
-      grad.addColorStop(0, '#2b231d');
-      grad.addColorStop(1, '#15110e');
-    } else if (scene.visual_method === 'map') {
-      grad.addColorStop(0, '#1a2936');
-      grad.addColorStop(1, '#0e171f');
-    } else {
-      const r = Math.sin(globalT * 0.8) * 20 + 35;
-      const b = Math.cos(globalT * 0.8) * 30 + 75;
-      grad.addColorStop(0, `rgb(${r}, 25, ${b})`);
-      grad.addColorStop(1, '#110e1a');
-    }
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
 
-    // Dynamic Ken Burns Zoom & Pan
-    const zoom = 1.0 + t * 0.12;
-    ctx.save();
-    ctx.translate(w / 2, h / 2);
-    ctx.scale(zoom, zoom);
-    ctx.translate(-w / 2, -h / 2);
 
-    // Visual Modality Graphics
-    switch (scene.visual_method) {
-      case 'infographic':
-        // Animated statistic ring
-        ctx.beginPath();
-        ctx.arc(w / 2, h / 2 - 150, 220, -Math.PI / 2, -Math.PI / 2 + t * Math.PI * 2);
-        ctx.strokeStyle = '#FFDF00';
-        ctx.lineWidth = 18;
-        ctx.stroke();
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 96px "Be Vietnam Pro", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${Math.round(t * 74)}`, w / 2, h / 2 - 120);
-        ctx.font = '500 36px "Lexend", sans-serif';
-        ctx.fillStyle = '#FFB36B';
-        ctx.fillText('NGƯỜI LÍNH', w / 2, h / 2 - 50);
-        break;
-
-      case 'map':
-        // Vector grid & route line
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.lineWidth = 2;
-        for (let x = 100; x < w; x += 150) {
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, h);
-          ctx.stroke();
-        }
-        for (let y = 100; y < h; y += 150) {
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(w, y);
-          ctx.stroke();
-        }
-        // Animated trajectory path
-        ctx.beginPath();
-        ctx.moveTo(w / 2 - 300, h / 2);
-        ctx.quadraticCurveTo(w / 2, h / 2 - 200, w / 2 - 300 + t * 600, h / 2);
-        ctx.strokeStyle = '#00E5FF';
-        ctx.lineWidth = 10;
-        ctx.stroke();
-        break;
-
-      case 'svg':
-      case 'procedural':
-        // Frequency wave mechanics
-        ctx.beginPath();
-        for (let x = 100; x < w - 100; x += 10) {
-          const y = h / 2 - 100 + Math.sin(x / 80 + globalT * 6) * (60 * (1 + t));
-          if (x === 100) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.strokeStyle = '#FF453A';
-        ctx.lineWidth = 8;
-        ctx.stroke();
-        break;
-
-      default:
-        // Focal vignette card
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.roundRect(120, 350, w - 240, h / 2, 32);
-        ctx.fill();
-        ctx.strokeStyle = '#FFB36B';
-        ctx.lineWidth = 4;
-        ctx.stroke();
-        break;
-    }
-    ctx.restore();
-
-    // Scene Label Badge
-    const badgeX = Math.round(w * 0.06);
-    const badgeY = Math.round(h * 0.06);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-    ctx.fillRect(badgeX, badgeY, 380, 70);
-    ctx.fillStyle = '#00FF66';
-    ctx.font = 'bold 26px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(`CẢNH ${scene.scene_order}: ${scene.visual_method.toUpperCase()}`, badgeX + 25, badgeY + 45);
-  }
-
+  /**
+   * Renders synchronized Vietnamese animated subtitles using Phase 2 word cues
+   */
   private renderSubtitles(
     ctx: CanvasRenderingContext2D,
     w: number,
@@ -449,44 +565,91 @@ export class WebCodecsRenderer {
     scene: SceneItem,
     t: number
   ) {
-    const text = scene.narration_text;
-    const words = text.split(' ');
-    const activeWordIdx = Math.min(words.length - 1, Math.floor(t * words.length));
+    const text = scene.narration_text.trim();
+    if (!text) return;
 
-    // Dynamic vertical positioning based on aspect ratio
-    const y = Math.round(h * 0.78);
-    const subH = Math.min(180, Math.round(h * 0.16));
-    const cardW = Math.round(w * 0.86);
-    const cardX = Math.round((w - cardW) / 2);
+    // Check if word-level cues exist from Phase 2 Edge-TTS
+    const cues: SubtitleItem[] = scene.subtitles_json || [];
+    const localMs = Math.round(t * scene.duration_seconds * 1000);
 
-    ctx.textAlign = 'center';
+    let activeWordIndex = -1;
+    if (cues.length > 0) {
+      activeWordIndex = cues.findIndex((c) => localMs >= c.start_ms && localMs <= c.end_ms);
+      if (activeWordIndex === -1) {
+        // Fallback to closest preceding word
+        for (let i = cues.length - 1; i >= 0; i--) {
+          if (localMs >= cues[i].start_ms) {
+            activeWordIndex = i;
+            break;
+          }
+        }
+      }
+    }
+
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return;
+
+    if (activeWordIndex === -1) {
+      activeWordIndex = Math.min(words.length - 1, Math.floor(t * words.length));
+    }
+
+    // Position: Eye-level upper-middle for viral short-form retention (Y at 54% of height)
+    const y = Math.round(h * 0.54);
+    const wordsPerChunk = 4;
+    const chunkStart = Math.floor(activeWordIndex / wordsPerChunk) * wordsPerChunk;
+    const currentChunk = words.slice(chunkStart, chunkStart + wordsPerChunk);
+    const relativeActive = activeWordIndex - chunkStart;
+
+    const fontSize = Math.round(Math.min(w, h) * 0.058);
+    ctx.save();
+    ctx.font = `900 ${fontSize}px "Montserrat", "Impact", "Arial Black", sans-serif`;
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
 
-    // Bounding subtitle card backdrop
-    ctx.fillStyle = 'rgba(10, 8, 16, 0.85)';
-    ctx.roundRect(cardX, y - subH / 2, cardW, subH, 24);
-    ctx.fill();
-    ctx.strokeStyle = '#2A2238';
-    ctx.lineWidth = 3;
-    ctx.stroke();
+    // Measure and render words with Ricks Clips kinetic pop highlight
+    const spaceWidth = ctx.measureText(' ').width;
+    const wordWidths = currentChunk.map((wd) => ctx.measureText(wd.toUpperCase()).width);
+    const totalChunkWidth = wordWidths.reduce((a, b) => a + b, 0) + (currentChunk.length - 1) * spaceWidth;
 
-    // Group text into chunks for readability
-    const wordsPerChunk = w > h ? 6 : 4;
-    const chunkStart = Math.floor(activeWordIdx / wordsPerChunk) * wordsPerChunk;
-    const currentChunk = words.slice(chunkStart, chunkStart + wordsPerChunk);
+    let startX = (w - totalChunkWidth) / 2;
 
-    const fullStr = currentChunk.join(' ');
-    const fontSize = Math.round(Math.min(w, h) * 0.048);
-    ctx.font = `bold ${fontSize}px "Be Vietnam Pro", sans-serif`;
+    for (let idx = 0; idx < currentChunk.length; idx++) {
+      const wd = currentChunk[idx].toUpperCase();
+      const isWordActive = idx === relativeActive;
+      const wordW = wordWidths[idx];
 
-    // Dark stroke outline
-    ctx.strokeStyle = '#050308';
-    ctx.lineWidth = 8;
-    ctx.lineJoin = 'round';
-    ctx.strokeText(fullStr, w / 2, y);
+      ctx.save();
+      if (isWordActive) {
+        // Ricks Clips Signature Kinetic Pop bounce (scale 1.15x)
+        const cx = startX + wordW / 2;
+        const cy = y;
+        ctx.translate(cx, cy);
+        ctx.scale(1.15, 1.15);
+        ctx.translate(-cx, -cy);
 
-    // Active word highlight: bright yellow
-    ctx.fillStyle = '#FFDF00';
-    ctx.fillText(fullStr, w / 2, y);
+        ctx.shadowColor = '#FACC15';
+        ctx.shadowBlur = 18;
+      } else {
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+        ctx.shadowBlur = 12;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 4;
+      }
+
+      // Heavy Black Outline Stroke
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = Math.round(fontSize * 0.22);
+      ctx.lineJoin = 'round';
+      ctx.miterLimit = 2;
+      ctx.strokeText(wd, startX, y);
+
+      // Active word highlighted in bright yellow (#FACC15), inactive in white (#FFFFFF)
+      ctx.fillStyle = isWordActive ? '#FACC15' : '#FFFFFF';
+      ctx.fillText(wd, startX, y);
+      ctx.restore();
+
+      startX += wordW + spaceWidth;
+    }
+    ctx.restore();
   }
 }

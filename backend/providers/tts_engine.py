@@ -99,6 +99,8 @@ class TTSResult(BaseModel):
     sample_rate: int = 24000
     format: str = "mp3"
     cached: bool = False
+    filename: Optional[str] = None
+    file_path: Optional[str] = None
 
 # Vietnamese number-to-words dictionary
 ONES = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"]
@@ -315,11 +317,6 @@ class EdgeTTSVoiceProvider(VoiceProvider):
             voice=voice,
             **comm_kwargs
         )
-        # Critical Fix: edge_tts internally converts 'vi-VN-NamMinhNeural' into the legacy long string
-        # 'Microsoft Server Speech Text to Speech Voice (vi-VN, NamMinhNeural)', which causes
-        # Microsoft's WebSocket service to reject multi-sentence Vietnamese texts with NoAudioReceived.
-        # Re-assigning the clean short voice name ensures 100% synthesis success and full audio streams.
-        communicate.tts_config.voice = voice
 
         audio_bytes = bytearray()
         raw_words: List[Dict[str, Any]] = []
@@ -351,36 +348,45 @@ class EdgeTTSVoiceProvider(VoiceProvider):
         rate: str,
         pitch: str,
         volume: str,
-        max_retries: int = 3
+        max_retries: int = 2
     ) -> Tuple[bytes, List[Dict[str, Any]]]:
         """
         Synthesizes a single text chunk with concurrency control, timeout, and jittered backoff.
+        Automatically falls back to alternate Vietnamese neural voice if primary voice encounters NoAudioReceived.
         """
         timeout_sec = getattr(settings, "TTS_TIMEOUT_SECONDS", 30.0)
         last_error = None
 
-        for attempt in range(max_retries):
-            try:
-                async with self._semaphore:
-                    return await self._synthesize_single_chunk(
-                        chunk_text=chunk_text,
-                        voice=voice,
-                        rate=rate,
-                        pitch=pitch,
-                        volume=volume,
-                        timeout_sec=timeout_sec
-                    )
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                last_error = e
-                if attempt == max_retries - 1:
-                    break
-                # Exponential backoff with jitter
-                delay = (0.5 * (2 ** attempt)) + random.uniform(0.1, 0.4)
-                await asyncio.sleep(delay)
+        # Build prioritized voice list: preferred voice first, then alternate neural voice
+        voices_to_try = [voice]
+        alt_voice = "vi-VN-HoaiMyNeural" if "NamMinh" in voice else "vi-VN-NamMinhNeural"
+        if alt_voice not in voices_to_try:
+            voices_to_try.append(alt_voice)
 
-        raise RuntimeError(f"Edge-TTS chunk synthesis failed after {max_retries} attempts: {str(last_error)}")
+        for curr_voice in voices_to_try:
+            for attempt in range(max_retries):
+                try:
+                    async with self._semaphore:
+                        return await self._synthesize_single_chunk(
+                            chunk_text=chunk_text,
+                            voice=curr_voice,
+                            rate=rate,
+                            pitch=pitch,
+                            volume=volume,
+                            timeout_sec=timeout_sec
+                        )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    last_error = e
+                    if attempt == max_retries - 1:
+                        logger.warning(f"Voice {curr_voice} failed for chunk after {max_retries} retries: {e}. Trying alternate voice if available...")
+                        break
+                    # Exponential backoff with jitter
+                    delay = (0.5 * (2 ** attempt)) + random.uniform(0.1, 0.4)
+                    await asyncio.sleep(delay)
+
+        raise RuntimeError(f"Edge-TTS chunk synthesis failed across neural voices: {str(last_error)}")
 
     async def synthesize(
         self,
@@ -419,7 +425,9 @@ class EdgeTTSVoiceProvider(VoiceProvider):
                         provider="edge-tts-neural-cache",
                         sample_rate=meta.get("sample_rate", 24000),
                         format="mp3",
-                        cached=True
+                        cached=True,
+                        filename=audio_filename,
+                        file_path=os.path.abspath(audio_filepath)
                     )
                 except Exception:
                     pass  # If cache file corrupt, regenerate
@@ -444,7 +452,9 @@ class EdgeTTSVoiceProvider(VoiceProvider):
                         provider="edge-tts-neural-cache",
                         sample_rate=meta.get("sample_rate", 24000),
                         format="mp3",
-                        cached=True
+                        cached=True,
+                        filename=audio_filename,
+                        file_path=os.path.abspath(audio_filepath)
                     )
                 except Exception:
                     pass
@@ -528,7 +538,9 @@ class EdgeTTSVoiceProvider(VoiceProvider):
                     provider="edge-tts-neural",
                     sample_rate=24000,
                     format="mp3",
-                    cached=False
+                    cached=False,
+                    filename=audio_filename,
+                    file_path=os.path.abspath(audio_filepath)
                 )
 
             except Exception as e:
@@ -675,7 +687,9 @@ class VoiceStudioProvider(VoiceProvider):
                     provider="voicestudio-cached",
                     sample_rate=meta.get("sample_rate", 24000),
                     format="mp3",
-                    cached=True
+                    cached=True,
+                    filename=filename,
+                    file_path=os.path.abspath(filepath)
                 )
             except Exception:
                 pass
@@ -735,7 +749,9 @@ class VoiceStudioProvider(VoiceProvider):
             provider="voicestudio",
             sample_rate=24000,
             format="mp3",
-            cached=False
+            cached=False,
+            filename=filename,
+            file_path=os.path.abspath(filepath)
         )
 
 class UnifiedTTSProvider(VoiceProvider):

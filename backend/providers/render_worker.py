@@ -1010,7 +1010,10 @@ class RenderWorker:
         if not job:
             return False
 
-        if job.status in ("completed", "failed", "cancelled"):
+        if job.status == "cancelled":
+            return True
+
+        if job.status in ("completed", "failed"):
             return False
 
         now_iso = datetime.utcnow().isoformat() + "Z"

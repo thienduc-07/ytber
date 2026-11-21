@@ -4,9 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    ENVIRONMENT: str = "production"
+    ENVIRONMENT: str = "development"
     PORT: int = 8000
-    ALLOW_DEMO_AUTH: bool = False  # Strictly False by default in production. Only enabled for local dev/testing.
+    ALLOW_DEMO_AUTH: bool = True  # Enabled by default for local/self-hosted zero-config studio operation. Set False in production with Supabase.
     CORS_ORIGINS: List[str] = [
         "https://studio.yourdomain.com",
         "http://localhost:5173",

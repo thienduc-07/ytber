@@ -42,8 +42,9 @@ async def resolve_download_user_id(
         )
 
     if (raw_token.startswith("demo-") or raw_token.startswith("guest-")):
-        if getattr(settings, "ALLOW_DEMO_AUTH", False) and settings.ENVIRONMENT != "production":
-            return "demo-studio-user"
+        if getattr(settings, "ALLOW_DEMO_AUTH", True):
+            clean_sub = raw_token.strip()
+            return f"guest_{clean_sub[:16]}" if len(clean_sub) > 6 else "demo-studio-user"
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Demo authentication tokens are strictly disabled in production mode.",
@@ -156,6 +157,7 @@ async def get_render_diagnostics():
 
 
 @router.post("/cancel/{job_id}", response_model=Dict[str, Any])
+@router.delete("/cancel/{job_id}", response_model=Dict[str, Any])
 async def cancel_render_job(
     job_id: str,
     user_id: str = Depends(get_current_user_id)
@@ -163,11 +165,20 @@ async def cancel_render_job(
     """
     Cancels an active render job if owned by the caller.
     """
-    success = await worker.cancel_job(job_id, user_id=user_id)
-    if not success:
+    job = await worker.get_job_async(job_id, user_id=user_id)
+    if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Render job {job_id} not found or unauthorized to cancel"
+        )
+    if job.status == "cancelled":
+        return {"job_id": job_id, "status": "cancelled", "detail": "Render job already cancelled"}
+
+    success = await worker.cancel_job(job_id, user_id=user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Render job {job_id} could not be cancelled"
         )
     return {"job_id": job_id, "status": "cancelled", "detail": "Render job cancelled successfully"}
 

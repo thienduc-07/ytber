@@ -76,17 +76,23 @@ async def start_render_job(
         raise HTTPException(status_code=400, detail="SceneManifest must contain at least 1 scene")
 
     try:
-        job = worker.create_job(req.manifest, user_id=user_id)
+        job = await worker.create_job_async(req.manifest, user_id=user_id)
         return {
             "job_id": job.job_id,
             "status": job.status,
+            "stage": getattr(job, "stage", job.status),
             "stage_text": job.stage_text,
             "progress_percent": job.progress_percent,
             "resolution": job.resolution,
-            "video_format": job.video_format
+            "video_format": job.video_format,
+            "attempt_count": getattr(job, "attempt_count", 0)
         }
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except RuntimeError as e:
         raise HTTPException(status_code=429, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Không thể khởi tạo tiến trình kết xuất: {str(e)}")
 
 
 @router.get("/status/{job_id}", response_model=Dict[str, Any])
@@ -109,14 +115,44 @@ async def get_render_status(
         "job_id": job.job_id,
         "status": job.status,
         "progress_percent": job.progress_percent,
+        "stage": getattr(job, "stage", job.status),
         "stage_text": job.stage_text,
         "output_mp4_url": job.output_mp4_url,
         "duration_seconds": job.duration_seconds,
         "file_size_bytes": job.file_size_bytes,
         "resolution": job.resolution,
         "video_format": job.video_format,
+        "fps": getattr(job, "fps", 30),
+        "attempt_count": getattr(job, "attempt_count", 0),
+        "max_attempts": getattr(job, "max_attempts", 3),
         "error_message": job.error_message
     }
+
+
+@router.get("/diagnostics", response_model=Dict[str, Any])
+async def get_render_diagnostics():
+    """
+    Returns detailed queue depth, worker health, active worker ID,
+    and render runtime readiness.
+    """
+    diag = await worker.get_diagnostics()
+
+    # Check local tool availability
+    import shutil
+    has_node = shutil.which("node") is not None
+    has_npx = shutil.which("npx") is not None
+    has_ffmpeg = shutil.which("ffmpeg") is not None
+    has_ffprobe = shutil.which("ffprobe") is not None
+
+    diag["runtime_readiness"] = {
+        "node_installed": has_node,
+        "npx_installed": has_npx,
+        "ffmpeg_installed": has_ffmpeg,
+        "ffprobe_installed": has_ffprobe,
+        "hyperframes_pinned_version": "0.9.72",
+        "ready": has_node and has_npx and has_ffmpeg and has_ffprobe
+    }
+    return diag
 
 
 @router.post("/cancel/{job_id}", response_model=Dict[str, Any])

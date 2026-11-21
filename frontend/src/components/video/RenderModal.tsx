@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { SceneManifest } from '../../types/database';
 import { apiClient } from '../../services/apiClient';
-import { X, Download, CheckCircle2, Film, FileText, Sparkles, Loader2 } from 'lucide-react';
+import { X, Download, CheckCircle2, Film, FileText, Sparkles, Loader2, AlertTriangle, StopCircle } from 'lucide-react';
 
 interface RenderModalProps {
   manifest: SceneManifest;
@@ -11,8 +11,18 @@ interface RenderModalProps {
   initialJobId?: string | null;
 }
 
-export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onClose, autoStart = false, initialJobId = null }) => {
+const STORAGE_ACTIVE_JOB_KEY = 'ytber_active_render_job_id';
+
+export const RenderModal: React.FC<RenderModalProps> = ({
+  manifest,
+  isOpen,
+  onClose,
+  autoStart = false,
+  initialJobId = null
+}) => {
   const [isRendering, setIsRendering] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [jobStatus, setJobStatus] = useState<string>('idle');
   const [currentStage, setCurrentStage] = useState<string>('Sẵn sàng kết xuất video');
   const [progressPercent, setProgressPercent] = useState<number>(0);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -22,22 +32,43 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
   const [jobId, setJobId] = useState<string | null>(null);
 
   const pollIntervalRef = useRef<any>(null);
+  const consecutiveErrorsRef = useRef<number>(0);
+
+  const cleanupPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  };
 
   const startPolling = (targetJobId: string) => {
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    cleanupPolling();
     setIsRendering(true);
+    setIsCancelling(false);
     setJobId(targetJobId);
+    consecutiveErrorsRef.current = 0;
+    try {
+      localStorage.setItem(STORAGE_ACTIVE_JOB_KEY, targetJobId);
+    } catch {
+      // localStorage may fail in private mode
+    }
 
     pollIntervalRef.current = setInterval(async () => {
       try {
         const status = await apiClient.getRenderStatus(targetJobId);
+        consecutiveErrorsRef.current = 0;
+
+        setJobStatus(status.status);
         setProgressPercent(status.progress_percent || 0);
         setCurrentStage(status.stage_text || 'Đang xử lý...');
 
         if (status.status === 'completed') {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
+          cleanupPolling();
+          try {
+            localStorage.removeItem(STORAGE_ACTIVE_JOB_KEY);
+          } catch {}
           setIsRendering(false);
+          setIsCancelling(false);
           const downloadUri = await apiClient.getRenderDownloadUrl(targetJobId);
           setDownloadUrl(downloadUri);
           setVideoUrl(downloadUri);
@@ -46,39 +77,64 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
             size: status.file_size_bytes,
           });
         } else if (status.status === 'failed') {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
+          cleanupPolling();
+          try {
+            localStorage.removeItem(STORAGE_ACTIVE_JOB_KEY);
+          } catch {}
           setIsRendering(false);
+          setIsCancelling(false);
           setError(status.error_message || 'Quá trình kết xuất video thất bại');
+        } else if (status.status === 'cancelled') {
+          cleanupPolling();
+          try {
+            localStorage.removeItem(STORAGE_ACTIVE_JOB_KEY);
+          } catch {}
+          setIsRendering(false);
+          setIsCancelling(false);
+          setCurrentStage('Tiến trình kết xuất đã được hủy an toàn.');
         }
       } catch (err: any) {
-        console.warn('Error polling render status:', err);
+        consecutiveErrorsRef.current += 1;
+        console.warn(`Error polling render status (${consecutiveErrorsRef.current}/5):`, err);
+        if (consecutiveErrorsRef.current >= 5) {
+          cleanupPolling();
+          setIsRendering(false);
+          setIsCancelling(false);
+          setError('Mất kết nối với máy chủ quản lý render sau nhiều lần thử lại. Vui lòng kiểm tra mạng hoặc trạng thái máy chủ.');
+        }
       }
-    }, 1000);
+    }, 1200);
   };
 
   useEffect(() => {
     if (isOpen) {
-      if (initialJobId) {
-        startPolling(initialJobId);
+      const persistedJobId = localStorage.getItem(STORAGE_ACTIVE_JOB_KEY);
+      const effectiveJobId = initialJobId || persistedJobId;
+
+      if (effectiveJobId && !videoUrl) {
+        startPolling(effectiveJobId);
       } else if (autoStart && !isRendering && !videoUrl) {
         handleStartHyperFramesRender();
       }
     } else {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
+      cleanupPolling();
       setIsRendering(false);
+      setIsCancelling(false);
       setProgressPercent(0);
       setError(null);
     }
+
+    return () => {
+      cleanupPolling();
+    };
   }, [isOpen, autoStart, initialJobId]);
 
   const handleStartHyperFramesRender = async () => {
     setError(null);
     setIsRendering(true);
-    setProgressPercent(5);
+    setIsCancelling(false);
+    setProgressPercent(2);
+    setJobStatus('preparing');
     setCurrentStage('Đang khởi tạo kiến trúc đồ họa chuyển động HyperFrames...');
 
     try {
@@ -92,14 +148,32 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
     }
   };
 
-  const handleCancel = () => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
+  const handleCancel = async () => {
+    if (!jobId) {
+      cleanupPolling();
+      setIsRendering(false);
+      setProgressPercent(0);
+      setCurrentStage('Đã hủy kết xuất');
+      return;
     }
-    setIsRendering(false);
-    setProgressPercent(0);
-    setCurrentStage('Đã hủy kết xuất');
+
+    setIsCancelling(true);
+    setCurrentStage('Đang gửi lệnh dừng khẩn cấp tới HyperFrames Worker...');
+
+    try {
+      await apiClient.cancelRender(jobId);
+      setCurrentStage('Đang dừng các tiến trình render...');
+    } catch (err: any) {
+      console.warn('Lỗi khi gửi yêu cầu hủy render:', err);
+      // Even if cancel API errors, clean up locally
+      cleanupPolling();
+      try {
+        localStorage.removeItem(STORAGE_ACTIVE_JOB_KEY);
+      } catch {}
+      setIsRendering(false);
+      setIsCancelling(false);
+      setError(err?.message || 'Không thể gửi yêu cầu hủy render');
+    }
   };
 
   const downloadFile = (blob: Blob, filename: string) => {
@@ -169,17 +243,26 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
             <div>
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 Kết Xuất Video MP4
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono uppercase">
-                  HyperFrames Engine
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono uppercase tracking-wider">
+                  Durable HyperFrames Queue
                 </span>
               </h3>
-              <p className="text-xs text-gray-400">Headless Chromium + FFmpeg • 1080×1920 • 30 FPS • H.264 & AAC</p>
+              <p className="text-xs text-gray-400">
+                {manifest.aspect_ratio === '16:9' ? '1920×1080 (16:9 Long-form)' : '1080×1920 (9:16 Shorts)'} • 30 FPS • H.264 & AAC 48kHz
+              </p>
             </div>
           </div>
           <button
-            onClick={onClose}
-            disabled={isRendering}
-            className="text-gray-400 hover:text-white transition p-1 disabled:opacity-40"
+            onClick={() => {
+              if (isRendering && !isCancelling) {
+                if (window.confirm('Tiến trình kết xuất đang chạy ngầm. Bạn có muốn đóng cửa sổ theo dõi? Tiến trình vẫn sẽ tiếp tục kết xuất trên máy chủ.')) {
+                  onClose();
+                }
+              } else {
+                onClose();
+              }
+            }}
+            className="text-gray-400 hover:text-white transition p-1"
           >
             <X className="w-5 h-5" />
           </button>
@@ -212,7 +295,7 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
               className="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-extrabold rounded-xl shadow-lg flex items-center justify-center gap-2 transition hover:scale-[1.01] border border-emerald-400/40 text-sm"
             >
               <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
-              Bắt Đầu Kết Xuất MP4 (HyperFrames Deterministic)
+              Bắt Đầu Kết Xuất MP4 (Durable Worker Pipeline)
             </button>
           </div>
         )}
@@ -231,7 +314,11 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
             {/* Progress bar */}
             <div className="w-full bg-studio-card h-3 rounded-full overflow-hidden border border-studio-border">
               <div
-                className="bg-gradient-to-r from-emerald-500 via-studio-primary to-amber-400 h-full transition-all duration-300 ease-out"
+                className={`h-full transition-all duration-300 ease-out ${
+                  isCancelling
+                    ? 'bg-amber-500 animate-pulse'
+                    : 'bg-gradient-to-r from-emerald-500 via-studio-primary to-amber-400'
+                }`}
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -239,24 +326,37 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
             {/* Render stats */}
             <div className="grid grid-cols-3 gap-2 text-center text-xs bg-studio-card/60 p-3 rounded-xl border border-studio-border">
               <div>
-                <p className="text-gray-400">Tiến trình</p>
-                <p className="font-mono font-semibold text-emerald-400 mt-0.5">{jobId ? jobId.slice(0, 8) : 'HyperFrames'}</p>
+                <p className="text-gray-400">Mã Render Job</p>
+                <p className="font-mono font-semibold text-emerald-400 mt-0.5">{jobId ? jobId.slice(0, 8) : 'Pending'}</p>
               </div>
               <div>
-                <p className="text-gray-400">Chuẩn xuất</p>
-                <p className="font-mono font-semibold text-studio-highlight mt-0.5">H.264 MP4</p>
+                <p className="text-gray-400">Trạng thái Hàng đợi</p>
+                <p className="font-mono font-semibold text-studio-highlight mt-0.5 uppercase tracking-wide">
+                  {jobStatus}
+                </p>
               </div>
               <div>
-                <p className="text-gray-400">Âm thanh</p>
-                <p className="font-mono font-semibold text-white mt-0.5">48kHz AAC</p>
+                <p className="text-gray-400">Định dạng & Âm thanh</p>
+                <p className="font-mono font-semibold text-white mt-0.5">MP4 • 48kHz AAC</p>
               </div>
             </div>
 
             <button
               onClick={handleCancel}
-              className="py-2 px-4 bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 rounded-xl text-xs font-semibold transition"
+              disabled={isCancelling}
+              className="py-2.5 px-4 bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              Hủy Tiến Trình
+              {isCancelling ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-red-300" />
+                  Đang hủy tiến trình trên máy chủ...
+                </>
+              ) : (
+                <>
+                  <StopCircle className="w-3.5 h-3.5 text-red-400" />
+                  Hủy Tiến Trình Kết Xuất
+                </>
+              )}
             </button>
           </div>
         )}
@@ -311,6 +411,7 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
               onClick={() => {
                 setVideoUrl(null);
                 setDownloadUrl(null);
+                setJobStatus('idle');
               }}
               className="text-xs text-center text-gray-400 hover:text-white transition py-1"
             >
@@ -321,8 +422,9 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
 
         {/* Error message */}
         {error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300 text-xs">
-            {error}
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-red-400" />
+            <span>{error}</span>
           </div>
         )}
       </div>

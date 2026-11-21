@@ -295,7 +295,7 @@ async def one_click_produce_movie(
         db=db
     )
 
-    job = render_worker.create_job(manifest, user_id=user_id)
+    job = await render_worker.create_job_async(manifest, user_id=user_id)
     return {
         "job_id": job.job_id,
         "status": job.status,

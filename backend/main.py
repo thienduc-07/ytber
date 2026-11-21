@@ -94,7 +94,11 @@ class SecurityHeadersAndRateLimitMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     # Startup: ensure persistent database tables exist
     await init_db()
+    from backend.providers.render_worker import RenderWorker
+    worker = RenderWorker()
+    worker.ensure_worker_running()
     yield
+    worker._is_running = False
 
 app = FastAPI(
     title="YTBER — Unified AI Video Studio API",

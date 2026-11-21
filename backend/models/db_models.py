@@ -103,7 +103,7 @@ class RenderJobModel(Base):
     episode_id = Column(String(36), nullable=False, index=True)
     user_id = Column(String(64), nullable=False, index=True)
     job_type = Column(String(32), default="shorts")
-    status = Column(String(32), default="pending")  # pending, queued, building_composition, rendering_mp4, validating, completed, failed, cancelled
+    status = Column(String(32), default="queued", index=True)  # queued, preparing, rendering, validating, completed, failed, cancelling, cancelled
     progress = Column(Integer, default=0)
     stage_text = Column(String(255), default="Đang chờ xếp hàng...")
     output_url = Column(String(512), nullable=True)
@@ -114,19 +114,31 @@ class RenderJobModel(Base):
     video_format = Column(String(32), default="short-form")
     manifest_json = Column(JSON, nullable=True)
     error_message = Column(Text, nullable=True)
+    last_error = Column(Text, nullable=True)
+    worker_id = Column(String(64), nullable=True, index=True)
+    attempt_count = Column(Integer, default=0)
+    max_attempts = Column(Integer, default=3)
+    heartbeat_at = Column(String(32), nullable=True)
+    started_at = Column(String(32), nullable=True)
+    lease_expires_at = Column(String(32), nullable=True, index=True)
+    cancel_requested_at = Column(String(32), nullable=True)
     created_at = Column(String(32), default=lambda: datetime.utcnow().isoformat() + "Z")
+    updated_at = Column(String(32), default=lambda: datetime.utcnow().isoformat() + "Z")
     completed_at = Column(String(32), nullable=True)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
+            "job_id": self.id,
             "episode_id": self.episode_id,
             "user_id": self.user_id,
             "job_type": self.job_type,
             "status": self.status,
             "progress": self.progress,
+            "progress_percent": self.progress,
             "stage_text": self.stage_text,
             "output_url": self.output_url,
+            "output_mp4_url": self.output_url,
             "output_mp4_path": self.output_mp4_path,
             "duration_seconds": self.duration_seconds,
             "file_size_bytes": self.file_size_bytes,
@@ -134,7 +146,16 @@ class RenderJobModel(Base):
             "video_format": self.video_format,
             "manifest_json": self.manifest_json,
             "error_message": self.error_message,
+            "last_error": self.last_error,
+            "worker_id": self.worker_id,
+            "attempt_count": self.attempt_count,
+            "max_attempts": self.max_attempts,
+            "heartbeat_at": self.heartbeat_at,
+            "started_at": self.started_at,
+            "lease_expires_at": self.lease_expires_at,
+            "cancel_requested_at": self.cancel_requested_at,
             "created_at": self.created_at,
+            "updated_at": self.updated_at,
             "completed_at": self.completed_at,
         }
 

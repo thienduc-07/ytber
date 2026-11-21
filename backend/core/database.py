@@ -74,13 +74,25 @@ def init_db_sync() -> None:
                     ("file_size_bytes", "INTEGER DEFAULT 0"),
                     ("resolution", "VARCHAR(32) DEFAULT '1080x1920'"),
                     ("video_format", "VARCHAR(32) DEFAULT 'short-form'"),
-                    ("manifest_json", "JSON")
+                    ("manifest_json", "JSON"),
+                    ("last_error", "TEXT"),
+                    ("worker_id", "VARCHAR(64)"),
+                    ("attempt_count", "INTEGER DEFAULT 0"),
+                    ("max_attempts", "INTEGER DEFAULT 3"),
+                    ("heartbeat_at", "VARCHAR(32)"),
+                    ("started_at", "VARCHAR(32)"),
+                    ("lease_expires_at", "VARCHAR(32)"),
+                    ("cancel_requested_at", "VARCHAR(32)"),
+                    ("updated_at", "VARCHAR(32)")
                 ]
                 for col_name, col_type in new_cols:
                     try:
                         conn.execute(text(f"ALTER TABLE render_jobs ADD COLUMN {col_name} {col_type};"))
                     except Exception:
                         pass
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_render_jobs_status ON render_jobs (status);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_render_jobs_worker ON render_jobs (worker_id);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_render_jobs_lease ON render_jobs (lease_expires_at);"))
                 conn.commit()
             except Exception:
                 pass

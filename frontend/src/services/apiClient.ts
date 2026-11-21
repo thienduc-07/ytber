@@ -536,6 +536,7 @@ export const apiClient = {
     job_id: string;
     status: string;
     progress_percent: number;
+    stage?: string;
     stage_text: string;
     output_mp4_url?: string;
     duration_seconds?: number;
@@ -545,6 +546,19 @@ export const apiClient = {
     const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE}/render/status/${jobId}`, { headers });
     if (!res.ok) throw new Error(`Lấy trạng thái kết xuất thất bại (${res.status})`);
+    return await res.json();
+  },
+
+  async cancelRender(jobId: string): Promise<{ job_id: string; status: string; detail: string }> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/render/cancel/${jobId}`, {
+      method: 'POST',
+      headers,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Hủy tiến trình kết xuất thất bại (${res.status})`);
+    }
     return await res.json();
   },
 

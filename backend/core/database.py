@@ -66,6 +66,21 @@ def init_db_sync() -> None:
                 conn.execute(text("DROP INDEX IF EXISTS ix_audio_files_filename;"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audio_files_filename ON audio_files (filename);"))
                 conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_filename_user ON audio_files (filename, user_id);"))
+                # Add columns to render_jobs if they do not exist
+                new_cols = [
+                    ("stage_text", "VARCHAR(255) DEFAULT 'Đang chờ xếp hàng...'"),
+                    ("output_mp4_path", "VARCHAR(512)"),
+                    ("duration_seconds", "FLOAT DEFAULT 0.0"),
+                    ("file_size_bytes", "INTEGER DEFAULT 0"),
+                    ("resolution", "VARCHAR(32) DEFAULT '1080x1920'"),
+                    ("video_format", "VARCHAR(32) DEFAULT 'short-form'"),
+                    ("manifest_json", "JSON")
+                ]
+                for col_name, col_type in new_cols:
+                    try:
+                        conn.execute(text(f"ALTER TABLE render_jobs ADD COLUMN {col_name} {col_type};"))
+                    except Exception:
+                        pass
                 conn.commit()
             except Exception:
                 pass

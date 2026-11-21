@@ -6,6 +6,7 @@ import random
 import hashlib
 import asyncio
 import math
+import logging
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Tuple
 import httpx
@@ -15,6 +16,8 @@ import edge_tts
 from backend.core.config import settings
 from backend.providers.tts_chunker import VietnameseTextChunker, TextChunk
 from backend.providers.mp3_stitcher import MP3Stitcher
+
+logger = logging.getLogger(__name__)
 
 TTS_ENGINE_VERSION = "2.2.0"
 
@@ -529,14 +532,8 @@ class EdgeTTSVoiceProvider(VoiceProvider):
                 )
 
             except Exception as e:
-                # Failure recovery: fallback to deterministic offline generator
-                fallback_service = TTSService(storage_dir=self.storage_dir)
-                fallback_res = await fallback_service.synthesize(
-                    text=normalized_text,
-                    voice=selected_voice
-                )
-                fallback_res.provider = f"offline-fallback (generation error: {str(e)})"
-                return fallback_res
+                logger.error(f"EdgeTTS synthesis failed for text: {normalized_text[:30]}... Error: {e}")
+                raise TTSGenerationError(f"EdgeTTS synthesis failed: {str(e)}")
 
 class TTSService:
     """Offline Fallback Voice Service maintaining 100% API and filesystem continuity."""
@@ -586,42 +583,9 @@ class TTSService:
         return timings
 
     async def synthesize(self, text: str, voice: str = "vi-VN-NamMinhNeural") -> TTSResult:
-        normalized = self.normalizer.normalize(text)
-        words_count = max(1, len(normalized.split()))
-        duration_sec = round(max(2.0, words_count / 3.8), 2)
-        timings = self.generate_syllable_timings(normalized, duration_sec)
-
-        # Generate a valid MP3 file on disk so the returned audio_url never 404s
-        audio_id = f"fallback_{hashlib.sha256(normalized.encode()).hexdigest()[:16]}"
-        filename = f"{audio_id}.mp3"
-        filepath = os.path.join(self.storage_dir, filename)
-
-        if not os.path.exists(filepath):
-            # Synthesize real harmonic tone frames (>512 bytes, real non-silent audio)
-            # MPEG-2 Layer 3 frames (24kHz, 48kbps: 144 bytes per frame) with modulated payload
-            frames = []
-            num_frames = max(15, int(duration_sec / 0.024))
-            for f_idx in range(num_frames):
-                t = f_idx * 0.024
-                # Harmonic waveform modulation (440Hz + 880Hz octave)
-                sample_val = math.sin(2 * math.pi * 440 * t) * 0.7 + math.sin(2 * math.pi * 880 * t) * 0.3
-                waveform_byte = int((sample_val * 0.5 + 0.5) * 255)
-                # Rich entropy across the 140 payload bytes
-                payload = bytes((waveform_byte ^ (i * 7 + f_idx * 13 + (i % 5) * 31)) & 0xFF for i in range(140))
-                frames.append(b'\xff\xf3\x60\x00' + payload)
-
-            with open(filepath, "wb") as f:
-                f.write(b"".join(frames))
-
-        return TTSResult(
-            audio_id=audio_id,
-            normalized_text=normalized,
-            audio_url=f"/api/v1/tts/audio/{filename}",
-            duration_seconds=duration_sec,
-            words=timings,
-            provider="tts-offline-fallback",
-            sample_rate=24000,
-            format="mp3"
+        raise TTSGenerationError(
+            "Synthetic harmonic tones are strictly disabled in production. "
+            "A genuine neural voice provider (VoiceStudio or EdgeTTS) is required."
         )
 
 class VoiceStudioProvider(VoiceProvider):
@@ -786,7 +750,7 @@ class UnifiedTTSProvider(VoiceProvider):
     def __init__(
         self,
         storage_dir: Optional[str] = None,
-        allow_offline_fallback: bool = True,
+        allow_offline_fallback: bool = False,
         engine_mode: str = "auto"
     ):
         self.voicestudio = VoiceStudioProvider(storage_dir=storage_dir)
@@ -859,20 +823,11 @@ class UnifiedTTSProvider(VoiceProvider):
                 pitch=pitch,
                 volume=volume
             )
-            # If EdgeTTS returned an offline fallback and fallback is not allowed
-            if result.provider.startswith("offline-fallback") and not self.allow_offline_fallback:
-                edge_error = f"EdgeTTS failed ({result.provider})"
-            else:
-                return result
+            return result
         except Exception as e:
             edge_error = str(e)
 
-        # 3. Offline emergency fallback if explicitly allowed
-        if self.allow_offline_fallback:
-            fallback_service = TTSService(storage_dir=self.storage_dir)
-            return await fallback_service.synthesize(text, voice)
-
-        # 4. Both failed: Raise TTSGenerationError with root cause (NO MOCK AUDIO)
+        # 3. Both genuine providers failed: Raise TTSGenerationError with root cause (NO MOCK/SINE AUDIO)
         diag = []
         if vs_error:
             diag.append(f"VoiceStudio ({self.voicestudio.base_url}): {vs_error}")

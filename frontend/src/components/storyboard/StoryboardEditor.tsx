@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { SceneItem, SceneManifest, SceneAsset } from '../../types/database';
 import { apiClient } from '../../services/apiClient';
 import { 
-  Plus, Trash2, Image as ImageIcon, Search, Check, Clock, Layers, Volume2, Music
+  Plus, Trash2, Image as ImageIcon, Search, Check, Clock, Layers, Volume2, Music, Sparkles
 } from 'lucide-react';
 
 interface StoryboardEditorProps {
@@ -24,15 +24,18 @@ const VISUAL_METHODS = [
 const SOUNDSCAPE_PRESETS = [
   { id: 'horror_creepy', label: '👻 Kinh dị / Chuyện ma (Gió hú, tiếng bước chân kẽo kẹt, cửa hé, tiếng tim)' },
   { id: 'crime_noir', label: '🕵️ Trinh thám / Phá án (Mưa đêm, máy chữ lạch cạch, chớp máy ảnh)' },
-  { id: 'comedy_cartoon', label: '🎭 Hài hước / Hoạt họa (Tiếng lò xo boing, còi trượt, bong bóng)' },
-  { id: 'epic_action', label: '⚡ Hành động / Trailer (Va đập chấn động, whoosh nhanh, dồn nhịp)' },
-  { id: 'lofi_chill', label: '🌸 Lofi / Thư giãn (Tiếng đĩa than, chuông gió, mưa nhẹ)' },
-  { id: 'tropical_forest', label: '🌲 Rừng nhiệt đới (Ve sầu, gió tán lá, chim, bước chân lá)' },
+  { id: 'comedy_cartoon', label: '🎭 Hoạt họa / Hài hước (Lò xo boing, còi trượt, bong bóng nổ)' },
+  { id: 'epic_action', label: '⚡ Hành động / Trailer (Va đập chấn động, whoosh nhanh, dồn dập)' },
+  { id: 'lofi_chill', label: '🌸 Lofi / Thư giãn (Đĩa than tí tách, chuông gió, mưa nhẹ)' },
+  { id: 'ancient_dynasty', label: '🏛️ Cổ trang / Cung đình (Đàn tranh, chuông đồng, bước chân ngự đạo)' },
+  { id: 'tropical_forest', label: '🌲 Rừng nhiệt đới (Ve sầu, gió tán lá, chim hót, bước chân lá)' },
   { id: 'mountain_battlefield', label: '⚔️ Chiến trường đèo núi (Gió hú, rền đại bác, bước chân bùn)' },
   { id: 'financial_floor', label: '📈 Thị trường tài chính (Chuông vàng, văn phòng giao dịch)' },
-  { id: 'cyber_tech_lab', label: '💻 Phòng công nghệ (Server hum, data stream)' },
+  { id: 'cyber_tech_lab', label: '💻 Phòng công nghệ (Server hum, data stream whoosh)' },
+  { id: 'cyberpunk_neon', label: '🌃 Thành thị tương lai (Mưa neon, còi xe bay, tiếng synth ngầm)' },
   { id: 'deep_space', label: '🚀 Vũ trụ / Thiên văn (Sub-bass, cosmic wash)' },
   { id: 'green_wind_farm', label: '🍃 Đồng cỏ sinh thái (Gió turbine, thiên nhiên xanh)' },
+  { id: 'ocean_voyage', label: '🌊 Biển khơi / Hải trình (Sóng vỗ mạn thuyền, hải âu xa xăm)' },
 ];
 
 export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
@@ -41,6 +44,20 @@ export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
   onSelectScene,
   activeSceneIndex = 0,
 }) => {
+  const [presets, setPresets] = useState<{ id: string; label: string }[]>(SOUNDSCAPE_PRESETS);
+  const [isDetectingSceneIndex, setIsDetectingSceneIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    apiClient.fetchSoundscapePresets().then((backendPresets) => {
+      if (backendPresets && backendPresets.length > 0) {
+        setPresets(backendPresets.map((p: any) => ({
+          id: p.id,
+          label: p.name || p.label
+        })));
+      }
+    }).catch((err) => console.warn('Could not load remote soundscapes:', err));
+  }, []);
+
   const [assetModalSceneIndex, setAssetModalSceneIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -340,12 +357,40 @@ export const StoryboardEditor: React.FC<StoryboardEditorProps> = ({
                     onChange={(e) => handleUpdateScene(idx, { music_direction: e.target.value })}
                     className="flex-1 bg-studio-bg border border-studio-border rounded px-2 py-1 text-xs text-emerald-300 focus:outline-none focus:border-studio-primary font-medium"
                   >
-                    {SOUNDSCAPE_PRESETS.map((s) => (
+                    {presets.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.label}
                       </option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    disabled={isDetectingSceneIndex === idx}
+                    onClick={async () => {
+                      setIsDetectingSceneIndex(idx);
+                      try {
+                        const enriched = await apiClient.autoEnrichSoundscape({
+                          ...manifest,
+                          scenes: [scene]
+                        });
+                        if (enriched.scenes && enriched.scenes[0]) {
+                          handleUpdateScene(idx, {
+                            music_direction: enriched.scenes[0].music_direction,
+                            sound_design: enriched.scenes[0].sound_design || (scene as any).sound_design
+                          });
+                        }
+                      } catch (e) {
+                        console.warn('Auto detect failed:', e);
+                      } finally {
+                        setIsDetectingSceneIndex(null);
+                      }
+                    }}
+                    className="text-[10px] bg-studio-primary/20 hover:bg-studio-primary/40 text-studio-primary px-2 py-1 rounded border border-studio-primary/30 flex items-center gap-1 transition"
+                    title="AI tự động phân tích câu chuyện cảnh này để gán nhạc và âm thanh phù hợp"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    {isDetectingSceneIndex === idx ? 'Đang chọn...' : 'AI Tự chọn'}
+                  </button>
                 </div>
 
                 {/* Sound Effects (SFX) Badge List & Search */}

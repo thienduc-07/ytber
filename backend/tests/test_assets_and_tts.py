@@ -37,14 +37,13 @@ def test_vietnamese_text_normalizer():
 async def test_tts_syllable_timings():
     service = TTSService()
     text = "74 người lính bước đều."
-    result = await service.synthesize(text)
+    timings = service.generate_syllable_timings(text, total_duration_sec=3.0)
     
-    assert result.duration_seconds >= 2.0
-    assert len(result.words) > 0
+    assert len(timings) > 0
     
     # Check monotonic timestamps
     last_end = 0
-    for w in result.words:
+    for w in timings:
         assert w.start_ms >= last_end
         assert w.end_ms > w.start_ms
         last_end = w.end_ms

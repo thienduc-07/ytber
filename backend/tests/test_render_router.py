@@ -6,15 +6,28 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
+from backend.core.config import settings
 from backend.providers.hyperframes_adapter import HyperFramesAdapter
+from backend.tests.test_director_router import get_auth_headers, TEST_SECRET
 
 client = TestClient(app)
+
+@pytest.fixture(autouse=True)
+def setup_test_env(monkeypatch):
+    monkeypatch.setattr(settings, "SUPABASE_JWT_SECRET", TEST_SECRET)
+    monkeypatch.setattr(settings, "SUPABASE_JWT_AUDIENCE", "authenticated")
+    monkeypatch.setattr(settings, "SUPABASE_JWT_ISSUER", "https://test.supabase.co/auth/v1")
 
 
 def test_hyperframes_adapter_composition_generation(tmp_path):
     """Verify HyperFramesAdapter generates valid index.html, hyperframes.json, and package.json."""
     adapter = HyperFramesAdapter(base_render_dir=str(tmp_path))
     job_dir = adapter.prepare_job_workspace("test_job_123")
+
+    v1_path = os.path.join(str(tmp_path), "v1.mp3")
+    v2_path = os.path.join(str(tmp_path), "v2.mp3")
+    adapter.synthesize_acoustic_asset(v1_path, "voice_mock", duration_sec=3.0)
+    adapter.synthesize_acoustic_asset(v2_path, "voice_mock", duration_sec=3.0)
 
     mock_manifest = {
         "title": "Chiến Dịch Lịch Sử 1954",
@@ -26,13 +39,15 @@ def test_hyperframes_adapter_composition_generation(tmp_path):
                 "scene_order": 1,
                 "narration_text": "Bản đồ cứ điểm Điện Biên Phủ năm 1954 tại lòng chảo Tây Bắc.",
                 "duration_seconds": 3.0,
-                "visual_method": "map"
+                "visual_method": "map",
+                "audio_url": v1_path
             },
             {
                 "scene_order": 2,
                 "narration_text": "Toàn quân ta gồm hàng chục nghìn chiến sĩ anh dũng kéo pháo.",
                 "duration_seconds": 3.0,
-                "visual_method": "infographic"
+                "visual_method": "infographic",
+                "audio_url": v2_path
             }
         ]
     }
@@ -71,14 +86,15 @@ def test_render_api_start_and_status():
         ]
     }
 
-    res = client.post("/api/v1/render/start", json={"manifest": mock_manifest})
+    headers = get_auth_headers("render_test_user")
+    res = client.post("/api/v1/render/start", json={"manifest": mock_manifest}, headers=headers)
     assert res.status_code == 200
     data = res.json()
     assert "job_id" in data
     assert data["status"] in ["queued", "building_composition", "rendering_mp4"]
 
     job_id = data["job_id"]
-    status_res = client.get(f"/api/v1/render/status/{job_id}")
+    status_res = client.get(f"/api/v1/render/status/{job_id}", headers=headers)
     assert status_res.status_code == 200
     status_data = status_res.json()
     assert status_data["job_id"] == job_id

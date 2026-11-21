@@ -103,9 +103,16 @@ class RenderJobModel(Base):
     episode_id = Column(String(36), nullable=False, index=True)
     user_id = Column(String(64), nullable=False, index=True)
     job_type = Column(String(32), default="shorts")
-    status = Column(String(32), default="pending")  # pending, queued, processing, completed, failed, cancelled
+    status = Column(String(32), default="pending")  # pending, queued, building_composition, rendering_mp4, validating, completed, failed, cancelled
     progress = Column(Integer, default=0)
+    stage_text = Column(String(255), default="Đang chờ xếp hàng...")
     output_url = Column(String(512), nullable=True)
+    output_mp4_path = Column(String(512), nullable=True)
+    duration_seconds = Column(Float, default=0.0)
+    file_size_bytes = Column(Integer, default=0)
+    resolution = Column(String(32), default="1080x1920")
+    video_format = Column(String(32), default="short-form")
+    manifest_json = Column(JSON, nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(String(32), default=lambda: datetime.utcnow().isoformat() + "Z")
     completed_at = Column(String(32), nullable=True)
@@ -118,7 +125,14 @@ class RenderJobModel(Base):
             "job_type": self.job_type,
             "status": self.status,
             "progress": self.progress,
+            "stage_text": self.stage_text,
             "output_url": self.output_url,
+            "output_mp4_path": self.output_mp4_path,
+            "duration_seconds": self.duration_seconds,
+            "file_size_bytes": self.file_size_bytes,
+            "resolution": self.resolution,
+            "video_format": self.video_format,
+            "manifest_json": self.manifest_json,
             "error_message": self.error_message,
             "created_at": self.created_at,
             "completed_at": self.completed_at,

@@ -482,8 +482,32 @@ class AISoundscapeDirector:
                 "default_sfx": ["sfx_typewriter", "sfx_camera_shutter"]
             },
             {
+                "id": "comedy_cartoon",
+                "name": "🎭 Hoạt họa / Hài hước (Lò xo boing, còi trượt, bong bóng nổ)",
+                "music_theme": "cartoon_whimsical_bounce",
+                "default_sfx": ["sfx_spring_boing", "sfx_slide_whistle"]
+            },
+            {
+                "id": "epic_action",
+                "name": "⚡ Hành động / Trailer (Va đập chấn động, whoosh nhanh, dồn dập)",
+                "music_theme": "epic_percussion_trailer",
+                "default_sfx": ["sfx_impact", "sfx_whoosh"]
+            },
+            {
+                "id": "lofi_chill",
+                "name": "🌸 Lofi / Thư giãn (Đĩa than tí tách, chuông gió, mưa nhẹ)",
+                "music_theme": "lofi_vinyl_chillhop",
+                "default_sfx": ["sfx_vinyl_crackle", "sfx_wind_chime"]
+            },
+            {
+                "id": "ancient_dynasty",
+                "name": "🏛️ Cổ trang / Cung đình (Đàn tranh, chuông đồng, bước chân ngự đạo)",
+                "music_theme": "traditional_zither_court",
+                "default_sfx": ["sfx_bronze_bell", "sfx_zither_strum"]
+            },
+            {
                 "id": "tropical_forest",
-                "name": "🌲 Rừng nhiệt đới (Ve sầu, gió tán lá, chim, bước chân lá)",
+                "name": "🌲 Rừng nhiệt đới (Ve sầu, gió tán lá, chim hót, bước chân lá)",
                 "music_theme": "nature_acoustic_strings",
                 "default_sfx": ["sfx_step_01", "sfx_foliage_01"]
             },
@@ -506,6 +530,12 @@ class AISoundscapeDirector:
                 "default_sfx": ["sfx_data_stream"]
             },
             {
+                "id": "cyberpunk_neon",
+                "name": "🌃 Thành thị tương lai (Mưa neon, còi xe bay, tiếng synth ngầm)",
+                "music_theme": "cyberpunk_dystopian_synth",
+                "default_sfx": ["sfx_neon_flicker", "sfx_flyby_whoosh"]
+            },
+            {
                 "id": "deep_space",
                 "name": "🚀 Vũ trụ / Thiên văn (Sub-bass, cosmic wash)",
                 "music_theme": "ethereal_cosmic_pad",
@@ -516,6 +546,12 @@ class AISoundscapeDirector:
                 "name": "🍃 Đồng cỏ sinh thái (Gió turbine, thiên nhiên xanh)",
                 "music_theme": "uplifting_acoustic_warm",
                 "default_sfx": ["sfx_turbine_whoosh"]
+            },
+            {
+                "id": "ocean_voyage",
+                "name": "🌊 Biển khơi / Hải trình (Sóng vỗ mạn thuyền, hải âu xa xăm)",
+                "music_theme": "ocean_acoustic_ambient",
+                "default_sfx": ["sfx_waves_crash", "sfx_seagull_call"]
             }
         ]
 

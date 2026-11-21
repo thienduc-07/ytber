@@ -167,9 +167,15 @@ async def get_current_user_id(authorization: Optional[str] = Header(None)) -> st
         )
     
     token = parts[1]
-    # Allow demo/guest token for zero-friction studio access in demo/local testing mode
-    if token.startswith("demo-") or token.startswith("guest-"):
-        return "demo-studio-user"
+    # Gated demo/guest token: Strictly disabled in production. Only allowed if ALLOW_DEMO_AUTH is True and not in production.
+    if (token.startswith("demo-") or token.startswith("guest-")):
+        if getattr(settings, "ALLOW_DEMO_AUTH", False) and settings.ENVIRONMENT != "production":
+            return "demo-studio-user"
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Demo authentication tokens are strictly disabled in production mode.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     payload = decode_and_verify_supabase_jwt(token)
     user_id = payload.get("sub")

@@ -32,6 +32,7 @@ export const ScriptStudioPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [activeSceneIndex, setActiveSceneIndex] = useState(0);
   const [showRenderModal, setShowRenderModal] = useState(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   // VoiceStudio Settings Modal State
@@ -319,10 +320,10 @@ export const ScriptStudioPage: React.FC = () => {
   const handleZeroTouchGenerateMovie = async () => {
     if (!scriptText.trim()) return;
     setIsGeneratingMovie(true);
-    setNotice('🎬 Zero-Touch AI Studio: Đang đạo diễn kịch bản, tạo giọng AI & phối âm...');
+    setNotice('🎬 One-Click Studio: Đang phân tích kịch bản, tạo giọng đọc AI, phối âm 4 bus & bắt đầu kết xuất video...');
 
     try {
-      const generatedManifest = await apiClient.generateMovie({
+      const result = await apiClient.oneClickProduce({
         script_text: scriptText,
         genre: selectedGenre,
         video_format: videoFormat,
@@ -330,15 +331,16 @@ export const ScriptStudioPage: React.FC = () => {
         rate: voiceRate,
       });
 
-      setManifest(generatedManifest);
+      setManifest(result.manifest);
       setActiveSceneIndex(0);
-      setNotice(`🎬 Đạo diễn thành công ${generatedManifest.scenes.length} cảnh! Đang chuyển tiếp sang động cơ kết xuất HyperFrames...`);
+      setActiveJobId(result.job_id);
+      setNotice(`🎬 Đã khởi chạy tiến trình kết xuất video (${result.resolution})!`);
       
-      // Automatically trigger HyperFrames rendering modal
+      // Automatically trigger HyperFrames rendering modal with active job polling
       setShowRenderModal(true);
     } catch (err: any) {
-      console.error('Error generating movie:', err);
-      setNotice(`Lỗi tạo phim tự động: ${err?.message || 'Vui lòng thử lại'}`);
+      console.error('Error in one-click production:', err);
+      setNotice(`Lỗi sản xuất phim tự động: ${err?.message || 'Vui lòng thử lại'}`);
     } finally {
       setIsGeneratingMovie(false);
       setTimeout(() => setNotice(null), 5000);
@@ -919,7 +921,11 @@ export const ScriptStudioPage: React.FC = () => {
       <RenderModal
         manifest={manifest}
         isOpen={showRenderModal}
-        onClose={() => setShowRenderModal(false)}
+        onClose={() => {
+          setShowRenderModal(false);
+          setActiveJobId(null);
+        }}
+        initialJobId={activeJobId}
       />
 
       {/* VoiceStudio & TTS Configuration Modal */}

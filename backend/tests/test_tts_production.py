@@ -18,7 +18,8 @@ from backend.providers.tts_engine import (
     VietnameseTextNormalizer,
     VOICE_REGISTRY,
     TTSResult,
-    WordTiming
+    WordTiming,
+    TTSGenerationError
 )
 
 TEST_SECRET = "test_phase2_production_tts_secret_32chars_long!!"
@@ -323,17 +324,12 @@ async def test_tts_retry_transient_failure_recovery():
 
 @pytest.mark.asyncio
 async def test_tts_offline_fallback_when_hard_failure():
-    """Verify permanent failure falls back gracefully to valid playable audio."""
+    """Verify permanent failure raises TTSGenerationError strictly prohibiting fake speech."""
     provider = EdgeTTSVoiceProvider()
 
     with patch.object(provider, "_synthesize_chunk_with_retry", side_effect=RuntimeError("Edge TTS Service Down")):
-        result = await provider.synthesize("Đoạn văn kiểm tra chế độ dự phòng khẩn cấp.", voice="vi-VN-NamMinhNeural")
-        assert result.duration_seconds > 0
-        assert len(result.words) > 0
-        # Check audio file on disk
-        filepath = os.path.join(provider.storage_dir, f"{result.audio_id}.mp3")
-        assert os.path.exists(filepath)
-        assert os.path.getsize(filepath) > 0
+        with pytest.raises(TTSGenerationError):
+            await provider.synthesize("Đoạn văn kiểm tra chế độ dự phòng khẩn cấp.", voice="vi-VN-NamMinhNeural")
 
 # ==============================================================================
 # 8. API ENDPOINT & VALIDATION TESTS

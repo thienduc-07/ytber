@@ -28,9 +28,10 @@ from typing import Dict, Any, Optional, List, Tuple
 from pydantic import BaseModel, Field
 
 from sqlalchemy import select, update, text
-from backend.models.db_models import RenderJobModel
+from backend.models.db_models import RenderJobModel, AudioFileModel
 from backend.core.database import AsyncSessionLocal
 from backend.providers.hyperframes_adapter import HyperFramesAdapter
+from backend.providers.tts_engine import UnifiedTTSProvider
 from backend.core.config import settings
 
 logger = logging.getLogger("render_worker")
@@ -496,6 +497,120 @@ class RenderWorker:
             progress=5,
             stage_text="Đang phân tích kịch bản & khởi tạo storyboard chuyển động..."
         )
+
+        # 1a. Ensure all scenes have genuine Vietnamese voiceover audio (Zero-Touch Auto-Synthesis)
+        scenes = manifest.get("scenes", [])
+        if not scenes:
+            raise RuntimeError("Kịch bản không có cảnh nào để kết xuất.")
+
+        voice_cfg = manifest.get("voice_config", {})
+        voice_name = voice_cfg.get("voice") or "vi-VN-NamMinhNeural"
+        rate_val = voice_cfg.get("rate") or "+0%"
+        pitch_val = voice_cfg.get("pitch") or "+0Hz"
+
+        cached_job = self.jobs.get(job_id)
+        current_user_id = getattr(cached_job, "user_id", "demo-studio-user")
+
+        tts_provider: Optional[UnifiedTTSProvider] = None
+        has_synthesized_any = False
+
+        for idx, sc in enumerate(scenes):
+            s_order = sc.get("scene_order") or (idx + 1)
+            has_valid_voice = False
+            try:
+                p = self.adapter.resolve_scene_voiceover_path(sc, s_order)
+                if p and os.path.exists(p) and os.path.getsize(p) > 200:
+                    has_valid_voice = True
+            except Exception:
+                has_valid_voice = False
+
+            if not has_valid_voice:
+                narr_text = sc.get("narration_text", "").strip()
+                if not narr_text:
+                    raise RuntimeError(f"Cảnh {s_order} không có nội dung lời thoại (narration_text) để tạo giọng đọc.")
+
+                logger.info(f"[{job_id}] Auto-synthesizing genuine narration for scene {s_order}: '{narr_text[:40]}...'")
+                await self._update_job_state(
+                    job_id,
+                    status="preparing",
+                    progress=5 + int((idx / max(1, len(scenes))) * 12),
+                    stage_text=f"Đang tự động lồng tiếng AI tiếng Việt cho cảnh {s_order}/{len(scenes)}..."
+                )
+
+                if tts_provider is None:
+                    tts_provider = UnifiedTTSProvider(allow_offline_fallback=False)
+
+                tts_res = await tts_provider.synthesize(
+                    text=narr_text,
+                    voice=voice_name,
+                    rate=rate_val,
+                    pitch=pitch_val
+                )
+
+                real_dur = max(3.0, round(tts_res.duration_seconds, 2))
+                audio_filename = getattr(tts_res, "filename", None) or f"{tts_res.audio_id}.mp3"
+                audio_file_path = getattr(tts_res, "file_path", None) or os.path.abspath(
+                    os.path.join(tts_provider.storage_dir, audio_filename)
+                )
+
+                sc["audio_id"] = tts_res.audio_id
+                sc["audio_filename"] = audio_filename
+                sc["audio_file_path"] = audio_file_path
+                sc["audio_url"] = f"/api/v1/tts/audio/{audio_filename}"
+                sc["duration_seconds"] = real_dur
+                sc["audio_duration_seconds"] = real_dur
+                if hasattr(tts_res, "words") and tts_res.words:
+                    sc["subtitles_json"] = [
+                        w.model_dump() if hasattr(w, "model_dump") else w for w in tts_res.words
+                    ]
+
+                # Register audio in database for tenant ownership
+                try:
+                    async with AsyncSessionLocal() as session:
+                        stmt = select(AudioFileModel).where(
+                            AudioFileModel.filename == audio_filename,
+                            AudioFileModel.user_id == current_user_id
+                        )
+                        existing_audio = (await session.execute(stmt)).scalar_one_or_none()
+                        if not existing_audio:
+                            db_audio = AudioFileModel(
+                                id=str(uuid.uuid4()),
+                                user_id=current_user_id,
+                                filename=audio_filename,
+                                duration_seconds=real_dur
+                            )
+                            session.add(db_audio)
+                            await session.commit()
+                except Exception as db_e:
+                    logger.warning(f"[{job_id}] Audio registration warning: {db_e}")
+
+                has_synthesized_any = True
+
+        if has_synthesized_any:
+            # Recompute frame bounds and total duration
+            fps = manifest.get("video_specs", {}).get("fps", 30)
+            curr_frame = 0
+            for sc in scenes:
+                dur = sc.get("duration_seconds", 4.0)
+                f_count = int(round(dur * fps))
+                sc["start_frame"] = curr_frame
+                sc["end_frame"] = curr_frame + f_count
+                curr_frame += f_count
+            manifest["total_duration_sec"] = round(sum(s.get("duration_seconds", 4.0) for s in scenes), 2)
+            manifest["total_frames"] = curr_frame
+
+            # Persist updated manifest with audio references
+            try:
+                async with AsyncSessionLocal() as session:
+                    stmt = (
+                        update(RenderJobModel)
+                        .where(RenderJobModel.id == job_id)
+                        .values(manifest_json=json.dumps(manifest, ensure_ascii=False))
+                    )
+                    await session.execute(stmt)
+                    await session.commit()
+            except Exception as upd_err:
+                logger.warning(f"[{job_id}] Could not persist updated manifest with TTS: {upd_err}")
 
         loop = asyncio.get_event_loop()
         try:

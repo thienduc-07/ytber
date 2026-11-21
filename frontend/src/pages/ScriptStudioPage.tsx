@@ -399,8 +399,11 @@ export const ScriptStudioPage: React.FC = () => {
             rate: voiceRate,
           });
 
+          const audioFilename = `${tts.audio_id}.mp3`;
           updatedScenes[i] = {
             ...scene,
+            audio_id: tts.audio_id,
+            audio_filename: audioFilename,
             audio_url: tts.audio_url,
             duration_seconds: Math.max(3.0, tts.duration_seconds),
             subtitles_json: tts.words || [],

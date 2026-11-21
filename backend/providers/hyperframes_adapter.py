@@ -140,6 +140,8 @@ class HyperFramesAdapter:
         3. os.path.abspath(os.path.join("./data/audio", clean_filename))
         4. scene.get("audio_url") local file path if absolute or relative
         """
+        import urllib.parse
+
         audio_file_path = scene.get("audio_file_path")
         audio_url = scene.get("audio_url") or ""
         audio_id = scene.get("audio_id") or ""
@@ -149,8 +151,11 @@ class HyperFramesAdapter:
         if audio_filename:
             clean_filename = os.path.basename(audio_filename.strip())
         elif audio_url:
-            url_clean = audio_url.split("?")[0].strip()
-            clean_filename = os.path.basename(url_clean)
+            url_clean = urllib.parse.unquote(audio_url.split("?")[0].strip())
+            if "/api/v1/tts/audio/" in url_clean:
+                clean_filename = os.path.basename(url_clean.split("/api/v1/tts/audio/")[-1])
+            else:
+                clean_filename = os.path.basename(url_clean)
         elif audio_id:
             clean_filename = audio_id if audio_id.endswith(".mp3") else f"{audio_id}.mp3"
             clean_filename = os.path.basename(clean_filename.strip())
@@ -160,24 +165,36 @@ class HyperFramesAdapter:
         if audio_file_path and isinstance(audio_file_path, str):
             candidates.append(os.path.abspath(audio_file_path))
 
-        # Candidate 2: Configured audio storage path
+        # Candidate 2: Configured audio storage paths across possible working dirs
         storage_root = getattr(settings, "AUDIO_STORAGE_PATH", "./data/audio")
+        storage_dirs = [
+            os.path.abspath(storage_root),
+            os.path.abspath("./data/audio"),
+            os.path.abspath(os.path.join(os.getcwd(), "data/audio")),
+            os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "data", "audio"))
+        ]
+
         if clean_filename:
             safe_filename = "".join(c for c in clean_filename if c.isalnum() or c in (".", "_", "-"))
             if safe_filename:
-                candidates.append(os.path.abspath(os.path.join(storage_root, safe_filename)))
-                candidates.append(os.path.abspath(os.path.join("./data/audio", safe_filename)))
+                for s_dir in storage_dirs:
+                    candidates.append(os.path.join(s_dir, safe_filename))
+                    if not safe_filename.endswith(".mp3"):
+                        candidates.append(os.path.join(s_dir, f"{safe_filename}.mp3"))
 
         # Candidate 3: audio_url path if on local filesystem
         if audio_url:
-            url_clean = audio_url.split("?")[0].strip()
-            if os.path.isabs(url_clean):
+            url_clean = urllib.parse.unquote(audio_url.split("?")[0].strip())
+            if os.path.isabs(url_clean) and not url_clean.startswith("http"):
                 candidates.append(os.path.abspath(url_clean))
-            elif url_clean.startswith("/api/v1/tts/audio/"):
-                fname = url_clean.replace("/api/v1/tts/audio/", "")
+            elif "/api/v1/tts/audio/" in url_clean:
+                fname = url_clean.split("/api/v1/tts/audio/")[-1].strip()
                 safe_fname = "".join(c for c in fname if c.isalnum() or c in (".", "_", "-"))
-                candidates.append(os.path.abspath(os.path.join(storage_root, safe_fname)))
-                candidates.append(os.path.abspath(os.path.join("./data/audio", safe_fname)))
+                if safe_fname:
+                    for s_dir in storage_dirs:
+                        candidates.append(os.path.join(s_dir, safe_fname))
+                        if not safe_fname.endswith(".mp3"):
+                            candidates.append(os.path.join(s_dir, f"{safe_fname}.mp3"))
 
         for p in candidates:
             if p and os.path.exists(p) and os.path.getsize(p) > 200:

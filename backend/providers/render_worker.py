@@ -546,6 +546,14 @@ class RenderWorker:
         os.makedirs(logs_dir, exist_ok=True)
         log_path = os.path.join(logs_dir, "hyperframes.log")
 
+        # Set hardened environment for Chromium, Node.js and HyperFrames stability
+        custom_env = os.environ.copy()
+        custom_env["NODE_OPTIONS"] = "--max-old-space-size=4096"
+        custom_env["PRODUCER_LOW_MEMORY_MODE"] = "true"
+        custom_env["PRODUCER_PUPPETEER_PROTOCOL_TIMEOUT_MS"] = "300000"
+        custom_env["PUPPETEER_DISABLE_HEADLESS_WARNING"] = "true"
+        custom_env["ELECTRON_ENABLE_LOGGING"] = "0"
+
         # Use process group (preexec_fn=os.setsid) on POSIX to supervise all child processes
         preexec = os.setsid if hasattr(os, "setsid") else None
 
@@ -555,12 +563,42 @@ class RenderWorker:
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            preexec_fn=preexec
+            preexec_fn=preexec,
+            env=custom_env
         )
         self.running_pids[job_id] = proc.pid
 
         # Supervised asynchronous reading with dual timeout
         await self._supervise_subprocess_output(job_id, proc, log_path=log_path)
+
+        # Automatic Recovery on SIGABRT (-6): retry with CPU software canvas fallback (--browser-gpu=off)
+        if proc.returncode == -6:
+            logger.warning(
+                f"[{job_id}] HyperFrames exited with code -6 (SIGABRT/GPU crash). "
+                f"Retrying automatically with software rendering fallback (--browser-gpu=off)..."
+            )
+            await self._update_job_state(
+                job_id,
+                status="rendering",
+                progress=22,
+                stage_text="Tự động khôi phục kết xuất với chế độ ổn định CPU (--browser-gpu=off)..."
+            )
+            fallback_cmd = list(render_cmd)
+            if "--browser-gpu=off" not in fallback_cmd:
+                fallback_cmd.append("--browser-gpu=off")
+
+            proc_fallback = await asyncio.create_subprocess_exec(
+                *fallback_cmd,
+                cwd=job_dir,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                preexec_fn=preexec,
+                env=custom_env
+            )
+            self.running_pids[job_id] = proc_fallback.pid
+            await self._supervise_subprocess_output(job_id, proc_fallback, log_path=log_path)
+            proc = proc_fallback
 
         # Ensure returncode is 0
         if proc.returncode != 0:
@@ -695,37 +733,37 @@ class RenderWorker:
                 tokens = re.split(r"[\r\n]+", buffer)
                 buffer = tokens.pop()  # Keep incomplete trailing fragment
 
-            for token in tokens:
-                token_clean = token.strip()
-                if not token_clean:
-                    continue
+                for token in tokens:
+                    token_clean = token.strip()
+                    if not token_clean:
+                        continue
 
-                # Progress line parsing: e.g. "Streaming frame 120/1549  ████  27%"
-                # or "  35%  Streaming frame"
-                match_pct = re.search(r"(\d+)%\s+(Compiling|Extracting|Streaming|Encoding|Assembling|Render complete)", token_clean)
-                if match_pct:
-                    pct = int(match_pct.group(1))
-                    stage_name = match_pct.group(2)
-                    scaled_pct = int(20 + (pct / 100.0) * 75)
+                    # Progress line parsing: e.g. "Streaming frame 120/1549  ████  27%"
+                    # or "  35%  Streaming frame"
+                    match_pct = re.search(r"(\d+)%\s+(Compiling|Extracting|Streaming|Encoding|Assembling|Render complete)", token_clean)
+                    if match_pct:
+                        pct = int(match_pct.group(1))
+                        stage_name = match_pct.group(2)
+                        scaled_pct = int(20 + (pct / 100.0) * 75)
 
-                    stage_desc = "Đang kết xuất khung hình hoạt họa..."
-                    if stage_name == "Compiling":
-                        stage_desc = "Đang biên dịch hoạt cảnh đồ họa..."
-                    elif stage_name == "Extracting":
-                        stage_desc = "Đang trích xuất tư liệu trực quan..."
-                    elif stage_name == "Streaming":
-                        stage_desc = f"Đang chụp và kết xuất khung hình hoạt họa ({pct}%)..."
-                    elif stage_name == "Encoding":
-                        stage_desc = f"Đang mã hóa video H.264 phần cứng ({pct}%)..."
-                    elif stage_name == "Assembling":
-                        stage_desc = "Đang đóng gói file MP4 tiêu chuẩn ISOBMFF..."
+                        stage_desc = "Đang kết xuất khung hình hoạt họa..."
+                        if stage_name == "Compiling":
+                            stage_desc = "Đang biên dịch hoạt cảnh đồ họa..."
+                        elif stage_name == "Extracting":
+                            stage_desc = "Đang trích xuất tư liệu trực quan..."
+                        elif stage_name == "Streaming":
+                            stage_desc = f"Đang chụp và kết xuất khung hình hoạt họa ({pct}%)..."
+                        elif stage_name == "Encoding":
+                            stage_desc = f"Đang mã hóa video H.264 phần cứng ({pct}%)..."
+                        elif stage_name == "Assembling":
+                            stage_desc = "Đang đóng gói file MP4 tiêu chuẩn ISOBMFF..."
 
-                    await self._update_job_state(
-                        job_id,
-                        status="rendering",
-                        progress=max(20, min(95, scaled_pct)),
-                        stage_text=stage_desc
-                    )
+                        await self._update_job_state(
+                            job_id,
+                            status="rendering",
+                            progress=max(20, min(95, scaled_pct)),
+                            stage_text=stage_desc
+                        )
 
         finally:
             if log_f:

@@ -122,6 +122,7 @@ export interface GenerateMovieParams {
   script_text: string;
   genre?: string;
   video_format?: 'short-form' | 'long-form';
+  target_duration_seconds?: number;
   voice?: string;
   rate?: string;
   pitch?: string;

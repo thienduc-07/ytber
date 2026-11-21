@@ -21,28 +21,33 @@ class CharacterRig2D:
     def render_character_svg(
         cls,
         char_id: str,
-        archetype: str = "horror_investigator",  # horror_investigator, shadow_entity, military_commander, artillery_soldier
-        pose: str = "frightened_creep",        # frightened_creep, shock_recoil, commanding_point, pulling_rope, observant_stand
-        expression: str = "terrified",         # terrified, shocked, determined, grim, eerie
+        archetype: str = "horror_investigator",  # horror_investigator, shadow_entity, military_commander, artillery_soldier, expert_presenter, doctor_scientist
+        pose: str = "frightened_creep",        # frightened_creep, shock_recoil, commanding_point, pulling_rope, observant_stand, explaining_pointer
+        expression: str = "terrified",         # terrified, shocked, determined, grim, eerie, confident_explaining
         x: float = 540,
         y: float = 1200,
         scale: float = 1.0,
-        flip_x: bool = False
+        flip_x: bool = False,
+        duration: float = 4.0
     ) -> Dict[str, Any]:
         """
         Renders complete vector character SVG markup and returns GSAP tween directives.
+        Includes genuine human animation: lip-sync mouth flapping, natural head tilt & nod,
+        eye blinking, and idle breathing.
         """
         transform_flip = "scale(-1, 1)" if flip_x else "scale(1, 1)"
         root_transform = f"translate({x}, {y}) scale({scale}) {transform_flip}"
 
         if archetype == "shadow_entity":
             return cls._render_shadow_entity(char_id, root_transform)
+        elif archetype in ("expert_presenter", "doctor_scientist", "medical_doctor"):
+            return cls._render_expert_presenter(char_id, root_transform, pose, expression, duration)
         elif archetype == "military_commander":
-            return cls._render_military_commander(char_id, root_transform, pose, expression)
+            return cls._render_military_commander(char_id, root_transform, pose, expression, duration)
         elif archetype == "artillery_soldier":
             return cls._render_artillery_soldier(char_id, root_transform, pose, expression)
         else: # horror_investigator
-            return cls._render_horror_investigator(char_id, root_transform, pose, expression)
+            return cls._render_horror_investigator(char_id, root_transform, pose, expression, duration)
 
     @classmethod
     def _render_horror_investigator(
@@ -184,16 +189,25 @@ class CharacterRig2D:
         </g>
         """
 
-        # GSAP tween generation for character life & terror
+        # GSAP tween generation for character life, mouth sync & human animation
+        repeat_mouth = max(6, int(duration * 4.2))
+        repeat_head = max(2, int(duration / 1.5))
         tweens = [
             # Darting nervous pupils
             f'tl.to("#{p}_pupil_l, #{p}_pupil_r", {{ x: -3, y: -2, duration: 0.18, ease: "power1.inOut" }}, "+=0.3");',
             f'tl.to("#{p}_pupil_l, #{p}_pupil_r", {{ x: 4, y: 1, duration: 0.22, ease: "power1.inOut" }}, "+=0.5");',
             f'tl.to("#{p}_pupil_l, #{p}_pupil_r", {{ x: 0, y: 0, duration: 0.15, ease: "power1.inOut" }}, "+=0.4");',
+            # Natural eye blinking
+            f'tl.to("#{p}_pupil_l, #{p}_pupil_r", {{ scaleY: 0.1, transformOrigin: "center center", yoyo: true, repeat: 1, duration: 0.08, repeatDelay: 2.3 }}, 0.6);',
+            # Talking lip-sync mouth flapping (human speech modulation)
+            f'tl.to("#{p}_mouth", {{ scaleY: 2.2, scaleX: 1.15, transformOrigin: "0px -34px", yoyo: true, repeat: {repeat_mouth}, duration: 0.12, ease: "power1.inOut" }}, 0.1);',
+            # Human head tilt and subtle conversation nod
+            f'tl.to("#{p}_head", {{ rotation: 3.5, transformOrigin: "0px 0px", yoyo: true, repeat: {repeat_head}, duration: 0.8, ease: "sine.inOut" }}, 0.2);',
+            f'tl.to("#{p}_head", {{ y: -4, duration: 0.45, yoyo: true, repeat: {repeat_head * 2}, ease: "sine.inOut" }}, 0.1);',
             # Shaking trembling flashlight beam
             f'tl.to("#{p}_light_cone", {{ rotation: 3, transformOrigin: "{hand_x}px {hand_y}px", yoyo: true, repeat: 9, duration: 0.14, ease: "sine.inOut" }}, 0.1);',
-            # Terrified breathing / chest heaving
-            f'tl.to("#{p}_torso, #{p}_head", {{ y: -5, duration: 0.5, yoyo: true, repeat: 7, ease: "power1.inOut" }}, 0.0);'
+            # Breathing / chest heaving
+            f'tl.to("#{p}_torso", {{ y: -4, duration: 0.6, yoyo: true, repeat: {max(3, int(duration / 1.2))}, ease: "power1.inOut" }}, 0.0);'
         ]
 
         return {"svg": svg, "tweens": tweens}
@@ -232,7 +246,8 @@ class CharacterRig2D:
         char_id: str,
         root_transform: str,
         pose: str,
-        expression: str
+        expression: str,
+        duration: float = 4.0
     ) -> Dict[str, Any]:
         """Renders a stylized Vietnamese military commander (General / Officer) with tactical map and cap."""
         p = char_id
@@ -263,13 +278,13 @@ class CharacterRig2D:
           <g id="{p}_head">
             <ellipse cx="0" cy="-65" rx="38" ry="45" fill="#F59E0B"/>
             <!-- Eyes (Determined) -->
-            <circle cx="-14" cy="-66" r="3.5" fill="#0F172A"/>
-            <circle cx="14" cy="-66" r="3.5" fill="#0F172A"/>
+            <circle id="{p}_eye_l" cx="-14" cy="-66" r="3.5" fill="#0F172A"/>
+            <circle id="{p}_eye_r" cx="14" cy="-66" r="3.5" fill="#0F172A"/>
             <!-- Firm Eyebrows -->
             <path d="M -25 -74 L -6 -69" stroke="#1C1917" stroke-width="4" stroke-linecap="round"/>
             <path d="M 6 -69 L 25 -74" stroke="#1C1917" stroke-width="4" stroke-linecap="round"/>
             <!-- Mouth (Confident / Speaking) -->
-            <path id="{p}_mouth" d="M -12 -46 Q 0 -42 12 -46" stroke="#78350F" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <path id="{p}_mouth" d="M -12 -46 Q 0 -42 12 -46" stroke="#78350F" stroke-width="3.5" fill="none" stroke-linecap="round"/>
 
             <!-- Military Visor Cap -->
             <ellipse cx="0" cy="-90" rx="46" ry="16" fill="#3D5A37"/>
@@ -289,9 +304,106 @@ class CharacterRig2D:
         </g>
         """
 
+        repeat_mouth = max(6, int(duration * 4.0))
+        repeat_head = max(2, int(duration / 1.6))
         tweens = [
             f'tl.fromTo("#{p}_arm_point", {{ rotation: -10, transformOrigin: "36px -25px" }}, {{ rotation: 8, duration: 1.4, yoyo: true, repeat: 3, ease: "power1.inOut" }}, 0.2);',
-            f'tl.to("#{p}_head", {{ y: -4, duration: 0.8, yoyo: true, repeat: 5, ease: "sine.inOut" }}, 0.1);'
+            # Lip-sync mouth speech modulation
+            f'tl.to("#{p}_mouth", {{ scaleY: 2.3, scaleX: 1.1, transformOrigin: "0px -46px", yoyo: true, repeat: {repeat_mouth}, duration: 0.125, ease: "power1.inOut" }}, 0.1);',
+            # Human head tilt and conversational nodding
+            f'tl.to("#{p}_head", {{ rotation: -3.0, transformOrigin: "0px 0px", yoyo: true, repeat: {repeat_head}, duration: 0.85, ease: "sine.inOut" }}, 0.2);',
+            f'tl.to("#{p}_head", {{ y: -4, duration: 0.5, yoyo: true, repeat: {repeat_head * 2}, ease: "sine.inOut" }}, 0.1);',
+            # Eye blinking
+            f'tl.to("#{p}_eye_l, #{p}_eye_r", {{ scaleY: 0.1, transformOrigin: "center center", yoyo: true, repeat: 1, duration: 0.08, repeatDelay: 2.4 }}, 0.5);',
+            # Torso breathing
+            f'tl.to("#{p}_tunic", {{ y: -3, duration: 0.7, yoyo: true, repeat: {max(2, int(duration / 1.4))}, ease: "power1.inOut" }}, 0.0);'
+        ]
+        return {"svg": svg, "tweens": tweens}
+
+    @classmethod
+    def _render_expert_presenter(
+        cls,
+        char_id: str,
+        root_transform: str,
+        pose: str,
+        expression: str,
+        duration: float = 4.0
+    ) -> Dict[str, Any]:
+        """
+        Renders a modern Expert Presenter / Medical Doctor / Scientific Narrator:
+        - Modern clinical coat / smart blazer with stethoscope or glasses.
+        - Articulated pointer hand referencing anatomical diagrams or HUD telemetry.
+        - Synchronized lip-sync talking mouth flapping, head tilt & conversational nodding.
+        """
+        p = char_id
+        svg = f"""
+        <g id="{p}_root" class="char-expert-presenter" transform="{root_transform}">
+          <!-- Soft Ground Shadow -->
+          <ellipse cx="0" cy="190" rx="80" ry="15" fill="#000000" opacity="0.45"/>
+
+          <!-- Dark Navy Trousers & Dress Shoes -->
+          <path d="M -26 65 L -30 175 L -10 175 L -10 65 Z" fill="#0F172A"/>
+          <path d="M -38 172 L -6 172 L -4 186 L -44 186 Z" fill="#020617"/>
+          <path d="M 10 65 L 10 175 L 30 175 L 26 65 Z" fill="#0F172A"/>
+          <path d="M 6 172 L 38 172 L 42 186 L 2 186 Z" fill="#020617"/>
+
+          <!-- Doctor Lab Coat & Cyan Medical Scrubs -->
+          <g id="{p}_torso">
+            <!-- Inner Cyan Scrubs Shirt -->
+            <path d="M -30 -30 L 30 -30 L 32 68 L -32 68 Z" fill="#0284C7"/>
+            <!-- Stethoscope Tube -->
+            <path d="M -18 -30 C -22 10 -15 35 0 38 C 15 35 22 10 18 -30" fill="none" stroke="#64748B" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="0" cy="40" r="7" fill="#E2E8F0" stroke="#334155" stroke-width="2"/> <!-- Chest Piece -->
+            <!-- White Lab Coat Lapels -->
+            <path d="M -44 -35 L -16 -35 L -8 72 L -42 72 Z" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1.5"/>
+            <path d="M 44 -35 L 16 -35 L 8 72 L 42 72 Z" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1.5"/>
+            <!-- Pocket with Medical Cross Badge -->
+            <rect x="18" y="10" width="16" height="20" rx="2" fill="#FFFFFF" stroke="#CBD5E1"/>
+            <rect x="24" y="14" width="4" height="12" fill="#EF4444"/>
+            <rect x="20" y="18" width="12" height="4" fill="#EF4444"/>
+          </g>
+
+          <!-- Articulated Head & Expressive Facial Features -->
+          <g id="{p}_head">
+            <ellipse cx="0" cy="-65" rx="36" ry="44" fill="#FED7AA"/>
+            <!-- Modern Hair Style -->
+            <path d="M -40 -70 C -42 -112 0 -118 38 -98 C 42 -85 40 -68 36 -62 C 28 -74 20 -82 0 -82 C -22 -82 -32 -76 -40 -70 Z" fill="#334155"/>
+            <!-- Friendly Intellect Eyes with Glasses -->
+            <circle id="{p}_eye_l" cx="-13" cy="-66" r="3.5" fill="#1E293B"/>
+            <circle id="{p}_eye_r" cx="13" cy="-66" r="3.5" fill="#1E293B"/>
+            <!-- Stylish Glasses Frame -->
+            <rect x="-22" y="-74" width="18" height="16" rx="4" fill="none" stroke="#0284C7" stroke-width="2.5"/>
+            <rect x="4" y="-74" width="18" height="16" rx="4" fill="none" stroke="#0284C7" stroke-width="2.5"/>
+            <line x1="-4" y1="-66" x2="4" y2="-66" stroke="#0284C7" stroke-width="2.5"/>
+            <!-- Friendly Speaking Mouth -->
+            <path id="{p}_mouth" d="M -10 -44 Q 0 -38 10 -44" stroke="#9A3412" stroke-width="3" fill="none" stroke-linecap="round"/>
+          </g>
+
+          <!-- Gesturing Explainer Pointer Arm -->
+          <g id="{p}_arm_pointer">
+            <path d="M 38 -28 Q 72 -20 115 -32" fill="none" stroke="#F8FAFC" stroke-width="17" stroke-linecap="round"/>
+            <circle cx="115" cy="-32" r="8" fill="#FED7AA"/>
+            <!-- Pointer Stylus / Baton pointing to diagram -->
+            <line x1="115" y1="-32" x2="152" y2="-44" stroke="#0284C7" stroke-width="5" stroke-linecap="round"/>
+            <circle cx="152" cy="-44" r="3" fill="#38BDF8"/>
+          </g>
+        </g>
+        """
+
+        repeat_mouth = max(6, int(duration * 4.2))
+        repeat_head = max(2, int(duration / 1.5))
+        tweens = [
+            # Pointer Arm gesturing to diagram
+            f'tl.fromTo("#{p}_arm_pointer", {{ rotation: -8, transformOrigin: "38px -28px" }}, {{ rotation: 12, duration: 1.2, yoyo: true, repeat: 3, ease: "power1.inOut" }}, 0.1);',
+            # Human speech lip-sync mouth flapping
+            f'tl.to("#{p}_mouth", {{ scaleY: 2.4, scaleX: 1.12, transformOrigin: "0px -44px", yoyo: true, repeat: {repeat_mouth}, duration: 0.12, ease: "power1.inOut" }}, 0.1);',
+            # Natural human head tilt & nod
+            f'tl.to("#{p}_head", {{ rotation: 3.5, transformOrigin: "0px 0px", yoyo: true, repeat: {repeat_head}, duration: 0.8, ease: "sine.inOut" }}, 0.2);',
+            f'tl.to("#{p}_head", {{ y: -4, duration: 0.45, yoyo: true, repeat: {repeat_head * 2}, ease: "sine.inOut" }}, 0.1);',
+            # Natural eye blinking
+            f'tl.to("#{p}_eye_l, #{p}_eye_r", {{ scaleY: 0.08, transformOrigin: "center center", yoyo: true, repeat: 1, duration: 0.08, repeatDelay: 2.5 }}, 0.5);',
+            # Gentle breathing
+            f'tl.to("#{p}_torso", {{ y: -3.5, duration: 0.8, yoyo: true, repeat: {max(2, int(duration / 1.6))}, ease: "power1.inOut" }}, 0.0);'
         ]
         return {"svg": svg, "tweens": tweens}
 

@@ -219,7 +219,7 @@ VOICE_REGISTRY: Dict[str, Dict[str, Any]] = {
     "vi-VN-NamMinhNeural": {
         "id": "vi-VN-NamMinhNeural",
         "name": "Nam Minh (Giọng Nam - Miền Bắc)",
-        "display_name": "Nam Minh (Nam Bắc)",
+        "display_name": "Nam Minh (Nam Bắc - Trầm Ấm)",
         "gender": "Male",
         "locale": "vi-VN",
         "sample_rate": 24000,
@@ -232,7 +232,7 @@ VOICE_REGISTRY: Dict[str, Dict[str, Any]] = {
     "vi-VN-HoaiMyNeural": {
         "id": "vi-VN-HoaiMyNeural",
         "name": "Hoài My (Giọng Nữ - Miền Bắc)",
-        "display_name": "Hoài My (Nữ Bắc)",
+        "display_name": "Hoài My (Nữ Bắc - Truyền Cảm)",
         "gender": "Female",
         "locale": "vi-VN",
         "sample_rate": 24000,
@@ -241,6 +241,32 @@ VOICE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "default_volume": "+0%",
         "supported_parameters": ["rate", "pitch", "volume"],
         "description": "Giọng nữ truyền cảm, ấm áp, thích hợp làm video kinh tế, giáo dục, giải thích."
+    },
+    "vi-VN-NamGiapNeural": {
+        "id": "vi-VN-NamGiapNeural",
+        "name": "Nam Giáp (Giọng Nam - Hào Hùng Sử Thi)",
+        "display_name": "Nam Giáp (Nam Bắc - Hào Hùng)",
+        "gender": "Male",
+        "locale": "vi-VN",
+        "sample_rate": 24000,
+        "default_rate": "+0%",
+        "default_pitch": "-4Hz",
+        "default_volume": "+0%",
+        "supported_parameters": ["rate", "pitch", "volume"],
+        "description": "Giọng nam trầm hùng tráng, uy nghiêm, lý tưởng cho phim lịch sử, quân sự, phóng sự chiến tranh."
+    },
+    "vi-VN-MaiNgocNeural": {
+        "id": "vi-VN-MaiNgocNeural",
+        "name": "Mai Ngọc (Giọng Nữ - Sôi Nổi & Khoa Học)",
+        "display_name": "Mai Ngọc (Nữ Bắc - Tươi Sáng)",
+        "gender": "Female",
+        "locale": "vi-VN",
+        "sample_rate": 24000,
+        "default_rate": "+0%",
+        "default_pitch": "+5Hz",
+        "default_volume": "+0%",
+        "supported_parameters": ["rate", "pitch", "volume"],
+        "description": "Giọng nữ thanh thoát, tràn đầy năng lượng, phù hợp video y học, sinh học, giải phẫu và công nghệ."
     }
 }
 
@@ -341,11 +367,25 @@ class EdgeTTSVoiceProvider(VoiceProvider):
         volume: str,
         timeout_sec: float
     ) -> Tuple[bytes, List[Dict[str, Any]]]:
+        actual_voice = voice
+        actual_pitch = pitch
+        actual_rate = rate
+
+        # Persona voice mapping with bespoke pitch/timbre styling
+        if voice == "vi-VN-NamGiapNeural":
+            actual_voice = "vi-VN-NamMinhNeural"
+            if not pitch or pitch == "+0Hz":
+                actual_pitch = "-4Hz"
+        elif voice == "vi-VN-MaiNgocNeural":
+            actual_voice = "vi-VN-HoaiMyNeural"
+            if not pitch or pitch == "+0Hz":
+                actual_pitch = "+5Hz"
+
         comm_kwargs = {}
-        if rate and rate != "+0%":
-            comm_kwargs["rate"] = rate
-        if pitch and pitch != "+0Hz":
-            comm_kwargs["pitch"] = pitch
+        if actual_rate and actual_rate != "+0%":
+            comm_kwargs["rate"] = actual_rate
+        if actual_pitch and actual_pitch != "+0Hz":
+            comm_kwargs["pitch"] = actual_pitch
         if volume and volume != "+0%":
             comm_kwargs["volume"] = volume
 
@@ -359,7 +399,7 @@ class EdgeTTSVoiceProvider(VoiceProvider):
 
         communicate = edge_tts.Communicate(
             text=clean_chunk,
-            voice=voice,
+            voice=actual_voice,
             **comm_kwargs
         )
 

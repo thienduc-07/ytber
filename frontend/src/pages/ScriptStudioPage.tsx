@@ -13,6 +13,13 @@ import {
 
 const DEFAULT_SCRIPT = `Bạn có biết rằng, cách đây hơn 70 năm, tại một thung lũng lòng chảo ở Tây Bắc, quân và dân Việt Nam đã làm nên một kỳ tích chấn động địa cầu? Đó chính là chiến thắng Điện Biên Phủ lịch sử năm 1954. Dưới sự chỉ huy tài ba của Đại tướng Võ Nguyên Giáp, toàn quân ta đã kiên cường vượt mọi gian khổ, kéo pháo qua đèo cao, bạt núi mở đường để làm nên chiến công hiển hách lừng lẫy năm châu. Ngày 7 tháng 5 năm 1954, lá cờ Quyết chiến Quyết thắng tung bay trên nóc hầm De Castries, đánh dấu mốc son chói lọi trong lịch sử dân tộc! Hãy bấm đăng ký kênh để đón xem những câu chuyện lịch sử tự hào tiếp theo!`;
 
+const DEFAULT_VOICES: VoiceInfo[] = [
+  { id: 'vi-VN-NamMinhNeural', name: 'Nam Minh (Giọng Nam - Trầm Ấm Chuẩn)', display_name: 'Nam Minh (Nam Bắc)', gender: 'Male', locale: 'vi-VN' },
+  { id: 'vi-VN-HoaiMyNeural', name: 'Hoài My (Giọng Nữ - Truyền Cảm Ấm Áp)', display_name: 'Hoài My (Nữ Bắc)', gender: 'Female', locale: 'vi-VN' },
+  { id: 'vi-VN-NamGiapNeural', name: 'Nam Giáp (Giọng Nam - Hào Hùng Sử Thi)', display_name: 'Nam Giáp (Nam Bắc - Hào Hùng)', gender: 'Male', locale: 'vi-VN' },
+  { id: 'vi-VN-MaiNgocNeural', name: 'Mai Ngọc (Giọng Nữ - Sôi Nổi & Khoa Học)', display_name: 'Mai Ngọc (Nữ Bắc - Tươi Sáng)', gender: 'Female', locale: 'vi-VN' },
+];
+
 export const ScriptStudioPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -21,8 +28,9 @@ export const ScriptStudioPage: React.FC = () => {
   const [scriptText, setScriptText] = useState(DEFAULT_SCRIPT);
   const [selectedGenre, setSelectedGenre] = useState('historical_doc');
   const [videoFormat, setVideoFormat] = useState<'short-form' | 'long-form'>('short-form');
+  const [targetDurationSec, setTargetDurationSec] = useState<number>(60);
   const [genres, setGenres] = useState<GenreInfo[]>([]);
-  const [voices, setVoices] = useState<VoiceInfo[]>([]);
+  const [voices, setVoices] = useState<VoiceInfo[]>(DEFAULT_VOICES);
   const [voiceVoice, setVoiceVoice] = useState('vi-VN-NamMinhNeural');
   const [voiceRate, setVoiceRate] = useState('+0%');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -219,6 +227,11 @@ export const ScriptStudioPage: React.FC = () => {
   const handleFormatChange = (fmt: 'short-form' | 'long-form') => {
     setVideoFormat(fmt);
     const isLong = fmt === 'long-form';
+    if (isLong && targetDurationSec < 120) {
+      setTargetDurationSec(180);
+    } else if (!isLong && targetDurationSec > 90) {
+      setTargetDurationSec(60);
+    }
     setManifest(prev => ({
       ...prev,
       video_format: fmt,
@@ -239,7 +252,7 @@ export const ScriptStudioPage: React.FC = () => {
     try {
       const data = await apiClient.analyzeScript({
         script_text: scriptText,
-        target_duration_seconds: estimatedDurationSec,
+        target_duration_seconds: targetDurationSec || estimatedDurationSec,
         genre: selectedGenre,
         video_format: videoFormat,
       });
@@ -330,6 +343,7 @@ export const ScriptStudioPage: React.FC = () => {
         script_text: scriptText,
         genre: selectedGenre,
         video_format: videoFormat,
+        target_duration_seconds: targetDurationSec,
         voice: voiceVoice,
         rate: voiceRate,
       });
@@ -744,6 +758,69 @@ export const ScriptStudioPage: React.FC = () => {
                   {currentGenreObj.description}
                 </p>
               )}
+            </div>
+
+            {/* Video Duration Preset Selector */}
+            <div className="pt-1 border-t border-studio-border/60">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-semibold text-gray-300 flex items-center gap-1">
+                  <Film className="w-3 h-3 text-studio-primary" /> Thời lượng mục tiêu:
+                </label>
+                <span className="text-[11px] font-mono text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+                  {targetDurationSec >= 60
+                    ? `${Math.floor(targetDurationSec / 60)} phút${targetDurationSec % 60 ? ` ${targetDurationSec % 60}s` : ''}`
+                    : `${targetDurationSec} giây`}
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {videoFormat === 'short-form' ? (
+                  <>
+                    {[
+                      { sec: 15, label: '15s', badge: 'Fast' },
+                      { sec: 30, label: '30s', badge: 'Reels' },
+                      { sec: 60, label: '60s', badge: 'Chuẩn' },
+                      { sec: 90, label: '90s', badge: 'Dài' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.sec}
+                        type="button"
+                        onClick={() => setTargetDurationSec(opt.sec)}
+                        className={`py-1.5 px-1 rounded-xl text-center transition border ${
+                          targetDurationSec === opt.sec
+                            ? 'bg-studio-primary border-studio-primary text-white shadow-md'
+                            : 'bg-studio-bg border-studio-border text-gray-300 hover:text-white hover:border-gray-500'
+                        }`}
+                      >
+                        <div className="text-xs font-bold">{opt.label}</div>
+                        <div className="text-[9px] opacity-80">{opt.badge}</div>
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    {[
+                      { sec: 120, label: '2 Phút', badge: 'Khám phá' },
+                      { sec: 180, label: '3 Phút', badge: 'Cơ bản' },
+                      { sec: 300, label: '5 Phút', badge: 'Chuyên sâu' },
+                      { sec: 600, label: '10 Phút', badge: 'Đầy đủ' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.sec}
+                        type="button"
+                        onClick={() => setTargetDurationSec(opt.sec)}
+                        className={`py-1.5 px-1 rounded-xl text-center transition border ${
+                          targetDurationSec === opt.sec
+                            ? 'bg-studio-primary border-studio-primary text-white shadow-md'
+                            : 'bg-studio-bg border-studio-border text-gray-300 hover:text-white hover:border-gray-500'
+                        }`}
+                      >
+                        <div className="text-xs font-bold">{opt.label}</div>
+                        <div className="text-[9px] opacity-80">{opt.badge}</div>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
             </div>
           </div>
 

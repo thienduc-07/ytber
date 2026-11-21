@@ -65,6 +65,11 @@ class AIDirectorEngine:
         "nguyên tử", "lỗ đen", "thiên văn", "quang phổ", "khối lượng", "trọng lực", "sinh học",
         "hóa học", "tế bào", "khí quyển", "bức xạ", "không gian"
     ]
+    ANATOMY_TRIGGERS = [
+        "nội tạng", "tim", "trái tim", "phổi", "gan", "thận", "dạ dày", "mạch máu", "cơ quan", "y học",
+        "giải phẫu", "sinh học", "bệnh lý", "máu", "huyết áp", "ecg", "nhịp tim", "khám bệnh",
+        "bác sĩ", "cơ thể", "bộ phận", "tuần hoàn", "hô hấp", "tiêu hóa", "giải phẫu học", "doctor"
+    ]
     SOCIAL_TRIGGERS = [
         "môi trường", "biến đổi khí hậu", "ô nhiễm", "xã hội", "đô thị hóa", "rác thải",
         "năng lượng xanh", "giao thông", "dân số", "giáo dục", "sức khỏe", "cộng đồng",
@@ -86,6 +91,7 @@ class AIDirectorEngine:
             "economics": sum(1 for k in self.ECONOMIC_TRIGGERS if k in text_lower),
             "technology": sum(1 for k in self.TECH_TRIGGERS if k in text_lower),
             "science": sum(1 for k in self.SCIENCE_TRIGGERS if k in text_lower),
+            "anatomy": sum(1 for k in self.ANATOMY_TRIGGERS if k in text_lower),
             "social": sum(1 for k in self.SOCIAL_TRIGGERS if k in text_lower)
         }
 
@@ -142,6 +148,13 @@ class AIDirectorEngine:
             structure = "Hiện tượng kỳ thú -> Nguyên lý vật lý -> Mô phỏng không gian -> Ý nghĩa vũ trụ"
             music_theme = "ethereal_ambient_space_drone"
             palette = ["#030712", "#1E1B4B", "#4338CA", "#06B6D4", "#FDF4FF"]
+        elif best_cat == "anatomy":
+            era = "Y học Hiện đại & Giải phẫu Sinh lý Học Người"
+            tone = "Khoa học, trực quan sinh động, vi mô chi tiết và giải thích hấp dẫn"
+            audience = "Khán giả tò mò về y học, sinh học, sức khỏe và cơ chế kỳ diệu của cơ thể người"
+            structure = "Cơ chế hoạt động kỳ diệu (Hook) -> Cấu trúc giải phẫu vi mô -> Tác động sinh học -> Lời khuyên sức khỏe"
+            music_theme = "minimal_tech_electronic_pulse"
+            palette = ["#0A0E1A", "#FF2A55", "#00F0FF", "#39FF14", "#F8FAFC"]
         else:
             era = "Thời đại Đương đại & Đời sống Xã hội"
             tone = "Chân thực, nhân văn, kích thích tư duy cộng đồng"
@@ -240,6 +253,19 @@ class AIDirectorEngine:
             )
             registry[astronomer.character_id] = astronomer
 
+        elif category == "anatomy":
+            doctor = CharacterProfile(
+                character_id="char_doctor_01",
+                name="Bác sĩ Chuyên khoa Giải phẫu",
+                role="presenter",
+                body_proportions="stylized_cartoon",
+                costume_description="Áo blouse trắng bác sĩ phẳng phiu phối viền xanh y tế, ống nghe y tế stethoscope trên cổ áo, găng tay khám bệnh",
+                color_scheme=["#FFFFFF", "#0284C7", "#0F172A", "#10B981", "#EF4444"],
+                facial_features="Gương mặt thông thái, ánh mắt tập trung sắc sảo, cử chỉ tay linh hoạt trỏ vào sơ đồ giải phẫu cơ quan nội tạng",
+                distinguishing_props=["que trỏ laser giải phẫu", "máy theo dõi ECG đo điện tim", "mô hình trái tim 3D vi phẫu"]
+            )
+            registry[doctor.character_id] = doctor
+
         else:
             presenter = CharacterProfile(
                 character_id="char_narrator_01",
@@ -262,7 +288,8 @@ class AIDirectorEngine:
         sentence: str,
         semantics: TopicSemanticAnalysis,
         characters: Dict[str, CharacterProfile],
-        genre_prof: GenreProfile
+        genre_prof: GenreProfile,
+        video_format: str = "short-form"
     ) -> ScenePlan:
         """
         AI Director Core: Synthesizes narration into visual storytelling,
@@ -482,6 +509,28 @@ class AIDirectorEngine:
                 SoundDesignCue(sfx_id="sfx_camera_shutter", sfx_type="mechanical", description="Tiếng chụp ảnh hiện trường chớp flash", start_time_offset_ms=400, volume=0.40)
             ]
 
+        elif cat == "anatomy":
+            env = EnvironmentSpec(
+                setting_name="Phòng Thí nghiệm Giải phẫu Sinh học & Mô phỏng Cơ thể Người 3D",
+                environment_type="interior_lab",
+                time_of_day="day",
+                weather_particles="clear",
+                primary_colors=semantics.suggested_palette
+            )
+            vis_desc = f"Mô phỏng đồ họa giải phẫu cơ thể học: Cấu trúc cơ quan nội tạng với động mạch chủ, tâm thất co bóp nhịp nhàng 72 BPM, luồng xung điện tim và biểu đồ ECG thời gian thực."
+            char_actions = ["point_gesture", "present_data"]
+            props = ["mô hình tim giải phẫu đập tuần hoàn", "đường sóng điện tim ECG", "bảng chỉ số áp huyết"]
+            camera_angle = "eye_level"
+            camera_mov = "slow_push_in"
+            anim_instr = AnimationDirective(character_action="point_gesture", object_action="pulse_beating", parallax_enabled=True, motion_intensity=0.85)
+            lighting = "clinical_cyan_and_arterial_red_glow"
+            vis_method = "anatomy"
+            music_dir = "minimal_tech_electronic_pulse"
+            sfx_cues = [
+                SoundDesignCue(sfx_id="sfx_ecg_beep", sfx_type="mechanical", description="Tiếng bíp bíp máy đo nhịp tim ECG", start_time_offset_ms=0, volume=0.45),
+                SoundDesignCue(sfx_id="sfx_telemetry_hud", sfx_type="mechanical", description="Hiệu ứng HUD phân tích chỉ số y sinh", start_time_offset_ms=250, volume=0.35)
+            ]
+
         else:
             env = EnvironmentSpec(
                 setting_name="Không gian Đô thị Xanh Bền vững",
@@ -504,12 +553,15 @@ class AIDirectorEngine:
             ]
 
         # Calculate Duration from Vietnamese syllables
-        # 1 Vietnamese syllable ~ 3.6 syllables per second
-        # Ricks Clips Pacing: Rapid cuts targeting 1.8s - 3.5s per scene
+        # 1 Vietnamese syllable ~ 3.6 - 3.8 syllables per second
+        # Dynamic Pacing: Respects video format (Shorts 1.8s-4.8s vs Long-form 3.5s-14s)
         words = sentence.split()
         syllable_count = len(words)
         rate = genre_prof.syllables_per_second if genre_prof else 3.8
-        duration = max(1.8, min(4.5, round(syllable_count / rate, 1)))
+        if video_format == "long-form":
+            duration = max(3.5, min(14.0, round(syllable_count / rate, 1)))
+        else:
+            duration = max(1.8, min(4.8, round(syllable_count / rate, 1)))
 
         # Ricks Clips Dynamic Camera Rotation on every cut
         CAM_ROTATION = ["fast_push_in", "dolly_out", "pan_left", "pan_right", "tracking", "dynamic_zoom"]
@@ -584,34 +636,40 @@ class AIDirectorEngine:
         # 2. Consistent Character Registry
         characters = self.build_character_registry(matched_genre, clean_text)
 
-        # 3. Ricks Clips 3000 Viral Pacing Algorithm: Rapid cuts every 1.8s - 3.2s
-        # Deconstruct narrative into granular, dynamic visual beats for maximum retention (15-25+ scenes per short)
+        # 3. Dynamic Narrative Pacing: Rapid cuts for Shorts vs Cohesive beats for Long-form
         initial_sentences = [s.strip() for s in re.split(r'[.!?\n]+', clean_text) if len(s.strip()) > 3]
         if not initial_sentences:
             initial_sentences = [clean_text]
 
-        rapid_beats = []
-        for sent in initial_sentences:
-            words = sent.split()
-            # If sentence is reasonably concise (under 14 words), keep as 1 complete punchy scene
-            if len(words) <= 14:
-                rapid_beats.append(sent)
-            else:
-                # Split along clause markers (commas, semicolons, colons, dashes)
-                clauses = [c.strip() for c in re.split(r'[,;:\u2014]+', sent) if len(c.strip().split()) >= 3]
-                if len(clauses) >= 2:
-                    rapid_beats.extend(clauses)
+        if video_format == "long-form":
+            # For long-form (16:9), preserve complete explanatory sentences for cohesive 4s-14s scenes
+            scenes_text = [s for s in initial_sentences if len(s.split()) >= 3]
+            if not scenes_text:
+                scenes_text = initial_sentences
+        else:
+            # Viral Short-form: rapid cuts every 2.0s - 4.5s
+            rapid_beats = []
+            for sent in initial_sentences:
+                words = sent.split()
+                # If sentence is reasonably concise (under 14 words), keep as 1 complete punchy scene
+                if len(words) <= 14:
+                    rapid_beats.append(sent)
                 else:
-                    # Look for natural syntactic conjunctions if sentence is very long
-                    conjunction_split = re.split(r'\s+(?=và|nhưng|rồi|để|khi|trong khi)\s+', sent)
-                    if len(conjunction_split) >= 2 and all(len(p.split()) >= 3 for p in conjunction_split):
-                        rapid_beats.extend([p.strip() for p in conjunction_split])
+                    # Split along clause markers (commas, semicolons, colons, dashes)
+                    clauses = [c.strip() for c in re.split(r'[,;:\u2014]+', sent) if len(c.strip().split()) >= 3]
+                    if len(clauses) >= 2:
+                        rapid_beats.extend(clauses)
                     else:
-                        rapid_beats.append(sent)
+                        # Look for natural syntactic conjunctions if sentence is very long
+                        conjunction_split = re.split(r'\s+(?=và|nhưng|rồi|để|khi|trong khi)\s+', sent)
+                        if len(conjunction_split) >= 2 and all(len(p.split()) >= 3 for p in conjunction_split):
+                            rapid_beats.extend([p.strip() for p in conjunction_split])
+                        else:
+                            rapid_beats.append(sent)
 
-        scenes_text = [b for b in rapid_beats if len(b.split()) >= 2]
-        if not scenes_text:
-            scenes_text = initial_sentences
+            scenes_text = [b for b in rapid_beats if len(b.split()) >= 2]
+            if not scenes_text:
+                scenes_text = initial_sentences
 
         # 4. Direct Scenes
         scenes: List[ScenePlan] = []
@@ -625,7 +683,8 @@ class AIDirectorEngine:
                 sentence=s_text,
                 semantics=semantics,
                 characters=characters,
-                genre_prof=genre_prof
+                genre_prof=genre_prof,
+                video_format=video_format
             )
             scenes.append(sc_plan)
             total_syllables += len(s_text.split())
@@ -675,7 +734,8 @@ class AIDirectorEngine:
         script_text: str,
         genre: Optional[str] = None,
         video_format: str = "short-form",
-        visual_style: str = "2d_cartoon"
+        visual_style: str = "2d_cartoon",
+        target_duration_seconds: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Produces a rich, zero-touch Film Blueprint following dramatic storytelling principles:
@@ -691,6 +751,7 @@ class AIDirectorEngine:
         """
         analysis = self.analyze_and_direct(
             script_text=script_text,
+            target_duration=target_duration_seconds or (180 if video_format == "long-form" else 60),
             genre=genre,
             video_format=video_format,
             visual_style=visual_style

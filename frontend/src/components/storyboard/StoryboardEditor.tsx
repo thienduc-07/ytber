@@ -13,6 +13,9 @@ interface StoryboardEditorProps {
 }
 
 const VISUAL_METHODS = [
+  { id: 'anatomy', label: '🫀 Giải Phẫu Học & Cơ Quan Nội Tạng (Anatomy 2.5D & ECG HUD)' },
+  { id: 'schematic', label: '🔬 Sơ Đồ Kỹ Thuật Vi Mô (Blueprint & Radar Sweep)' },
+  { id: 'presenter', label: '👨‍⚕️ Bác Sĩ / Chuyên Gia Thuyết Minh (Character Rig & Lip-Sync)' },
   { id: 'toon', label: 'Hoạt Họa 2.5D (Articulated Rig & Parallax)' },
   { id: 'map', label: 'Bản Đồ Vector & Tuyến Hành Quân' },
   { id: 'infographic', label: 'Infographic Số Liệu & Biểu Đồ Động' },

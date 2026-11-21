@@ -35,11 +35,13 @@ class FilmBlueprintRequest(BaseModel):
     genre: str = Field(default="historical_doc", description="Thể loại video")
     video_format: str = Field(default="short-form", description="'short-form' (9:16) hoặc 'long-form' (16:9)")
     visual_style: str = Field(default="2d_cartoon", description="Phong cách hình ảnh")
+    target_duration_seconds: Optional[int] = Field(default=None, description="Thời lượng mục tiêu tính bằng giây")
 
 class GenerateMovieRequest(BaseModel):
     script_text: str = Field(..., min_length=10, description="Văn bản kịch bản tiếng Việt đầu vào")
     genre: str = Field(default="historical_doc", description="Thể loại video")
     video_format: str = Field(default="short-form", description="'short-form' (9:16) hoặc 'long-form' (16:9)")
+    target_duration_seconds: Optional[int] = Field(default=None, description="Thời lượng mục tiêu tính bằng giây")
     voice: str = Field(default="vi-VN-NamMinhNeural", description="Giọng đọc tiếng Việt")
     rate: str = Field(default="+0%", description="Tốc độ đọc")
     pitch: str = Field(default="+0Hz", description="Cao độ")
@@ -59,7 +61,8 @@ async def create_film_blueprint(req: FilmBlueprintRequest):
             script_text=req.script_text,
             genre=req.genre,
             video_format=req.video_format,
-            visual_style=req.visual_style
+            visual_style=req.visual_style,
+            target_duration_seconds=req.target_duration_seconds
         )
         return blueprint
     except Exception as e:
@@ -91,7 +94,8 @@ async def generate_movie_zero_touch(
             script_text=req.script_text,
             genre=req.genre,
             video_format=req.video_format,
-            visual_style=req.visual_style
+            visual_style=req.visual_style,
+            target_duration_seconds=req.target_duration_seconds
         )
 
         blueprint_scenes = blueprint.get("scenes", [])
@@ -156,42 +160,39 @@ async def generate_movie_zero_touch(
             visual_config: Dict[str, Any] = {}
             visual_method = bp_sc.get("visual_method", "toon")
 
-            query = bp_sc.get("visual_query") or blueprint.get("title") or "Vietnam history"
-            try:
-                discovered = await asset_discovery.search(query=query, limit=3, media_type="image")
-                if discovered:
-                    top_asset = discovered[0]
-                    # Secure download with provenance tracking
-                    try:
-                        downloaded = await asset_downloader.download_asset(
-                            url=top_asset.download_url,
-                            user_id=user_id
-                        )
-                        scene_assets.append({
-                            "id": top_asset.asset_id,
-                            "asset_type": "image",
-                            "source_url": top_asset.source_url,
-                            "download_url": top_asset.download_url,
-                            "local_url": downloaded["local_url"],
-                            "license_type": top_asset.license,
-                            "author_name": top_asset.creator,
-                            "attribution_text": top_asset.attribution_text,
-                            "provider": top_asset.provider,
-                            "semantic_relevance_score": 0.95,
-                            "cache_path": downloaded["file_path"]
-                        })
-                        visual_config["imageUrl"] = downloaded["local_url"]
-                        visual_method = "toon" if req.visual_style == "2d_cartoon" else "photo"
-                    except Exception as dl_err:
-                        # Fallback to procedural animated style if download fails
-                        visual_method = "toon"
+            # Only query external image repositories if the visual method is photo/stock/archival
+            if visual_method in ("photo", "stock", "archival"):
+                query = bp_sc.get("visual_query") or blueprint.get("title") or "Vietnam history"
+                try:
+                    discovered = await asset_discovery.search(query=query, limit=3, media_type="image")
+                    if discovered:
+                        top_asset = discovered[0]
+                        # Secure download with provenance tracking
+                        try:
+                            downloaded = await asset_downloader.download_asset(
+                                url=top_asset.download_url,
+                                user_id=user_id
+                            )
+                            scene_assets.append({
+                                "id": top_asset.asset_id,
+                                "asset_type": "image",
+                                "source_url": top_asset.source_url,
+                                "download_url": top_asset.download_url,
+                                "local_url": downloaded["local_url"],
+                                "license_type": top_asset.license,
+                                "author_name": top_asset.creator,
+                                "attribution_text": top_asset.attribution_text,
+                                "provider": top_asset.provider,
+                                "semantic_relevance_score": 0.95,
+                                "cache_path": downloaded["file_path"]
+                            })
+                            visual_config["imageUrl"] = downloaded["local_url"]
+                        except Exception as dl_err:
+                            visual_config["procedural"] = True
+                    else:
                         visual_config["procedural"] = True
-                else:
-                    visual_method = "toon"
+                except Exception as disc_err:
                     visual_config["procedural"] = True
-            except Exception:
-                visual_method = "toon"
-                visual_config["procedural"] = True
 
             # 2c. 4-Bus Soundscape Enrichment (Voiceover, BGM ducked, Ambience, SFX)
             stage = f"soundscape_scene_{sc_order}"

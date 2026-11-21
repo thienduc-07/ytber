@@ -132,6 +132,19 @@ GENRE_REGISTRY: Dict[str, GenreProfile] = {
         camera_style="noir low-angle with searchlight sweep",
         transition_style="shutter_flash_cut"
     ),
+    "anatomy": GenreProfile(
+        genre_id="anatomy",
+        display_name="Y Học & Cơ Quan Nội Tạng (Anatomy & Medical)",
+        description="Mô phỏng giải phẫu học cơ thể người 2.5D, nhịp đập tim 72 BPM, đồ thị ECG điện tim, mạch máu và phân tích y sinh.",
+        syllables_per_second=3.8,
+        min_scene_sec=2.5,
+        max_scene_sec=6.5,
+        narrative_stages=["organ_hook", "anatomical_structure", "physiological_function", "pathology_crisis", "medical_insight", "health_takeaway"],
+        preferred_visuals=["anatomy", "schematic", "presenter", "infographic"],
+        sound_ambience="minimal_tech_electronic_pulse_with_heartbeat",
+        camera_style="clinical slow push-in with dynamic telemetry HUD",
+        transition_style="crossfade"
+    ),
     "general": GenreProfile(
         genre_id="general",
         display_name="Kể Chuyện Đa Năng (General Storytelling)",

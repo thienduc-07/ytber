@@ -665,7 +665,12 @@ class AISoundscapeDirector:
             "sfx_coin_chime": ("0.60*sin(2*PI*2400*t)*exp(-12*t) + 0.35*sin(2*PI*4800*t)*exp(-15*t)", 0.8),
             "sfx_cash_register": ("0.50*sin(2*PI*1800*t)*exp(-15*t) + 0.40*sin(2*PI*3200*t)*exp(-20*t)", 0.9),
             "sfx_data_stream": ("0.30*sin(2*PI*(400 + 800*sin(2*PI*12*t))*t)*exp(-2*t)", 0.8),
-            "sfx_cartoon_boing": ("0.60*sin(2*PI*(200 + 350*sin(2*PI*10*t))*t)*exp(-3*t)", 0.8)
+            "sfx_cartoon_boing": ("0.60*sin(2*PI*(200 + 350*sin(2*PI*10*t))*t)*exp(-3*t)", 0.8),
+            "sfx_ecg_beep": ("0.65*sin(2*PI*880*t)*exp(-18*t)", 0.25),
+            "sfx_fluid_flow": ("0.25*sin(2*PI*(180+40*sin(2*PI*5*t))*t)*exp(-0.8*t)", 2.0),
+            "sfx_scan_sweep": ("0.35*sin(2*PI*(400+1600*t)*t)*exp(-2*t)", 1.2),
+            "sfx_telemetry_hud": ("0.40*sin(2*PI*1400*t)*exp(-25*(t-0.12*floor(t/0.12)))", 0.8),
+            "sfx_cinematic_boom": ("0.95*sin(2*PI*45*t)*exp(-1.5*t) + 0.50*sin(2*PI*90*t)*exp(-2.5*t)", 2.8)
         }
 
         expr, dur = expressions.get(sfx_id, ("0.4*sin(2*PI*440*t)*exp(-3*t)", 1.0))

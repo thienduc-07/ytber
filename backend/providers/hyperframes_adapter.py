@@ -55,6 +55,7 @@ class HyperFramesAdapter:
         if os.path.exists(filepath) and os.path.getsize(filepath) > 1000:
             return
 
+        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
         cmd = ["ffmpeg", "-y", "-f", "lavfi"]
         if audio_type == "bgm_heroic":
             # Rich cinematic brass/strings progression (C minor chord progression with bass pulse)
@@ -100,22 +101,54 @@ class HyperFramesAdapter:
     def select_visual_grammar(self, scene: Dict[str, Any], scene_idx: int, total_scenes: int, genre: str) -> str:
         """Selects the best code-first visual grammar for the narrative beat."""
         text = (scene.get("narration_text") or "").lower()
-        vis_method = scene.get("visual_method") or ""
+        vis_method = (scene.get("visual_method") or "").lower()
         cat = (genre or "").lower()
 
-        # 1. Horror & Creepy Urban Legend (Articulated 2D Character Rig & Illustrated Environment)
+        # 1. Direct explicit grammar override if specified
+        if vis_method in ("anatomy", "anatomical", "anatomical_system_breakdown"):
+            return "anatomical_system_breakdown"
+        if vis_method in ("schematic", "scientific", "scientific_technical_schematic"):
+            return "scientific_technical_schematic"
+        if vis_method in ("presenter", "doctor", "narrator", "narrator_expert_explainer"):
+            return "narrator_expert_explainer"
+
+        # 2. Anatomical, Internal Organs, Biological, Health & Medical explainer
+        is_anatomy = any(g in cat for g in ["medical", "biology", "health", "science_explainer"]) or any(
+            w in text for w in [
+                "nội tạng", "tim", "phổi", "gan", "thận", "não", "mạch máu", "cơ quan", "tế bào",
+                "y học", "sức khỏe", "bác sĩ", "sinh học", "huyết áp", "nhịp đập", "cơ thể",
+                "giải phẫu", "van tim", "oxy", "tuần hoàn", "co bóp", "hệ tiêu hóa", "bệnh lý"
+            ]
+        )
+        if is_anatomy:
+            anatomy_grammars = ["anatomical_system_breakdown", "scientific_technical_schematic", "narrator_expert_explainer"]
+            return anatomy_grammars[(scene_idx - 1) % len(anatomy_grammars)]
+
+        # 3. Scientific, Engineering, Mechanical & Deep-Tech explainer
+        is_science_tech = any(g in cat for g in ["tech", "engineering", "space"]) or any(
+            w in text for w in [
+                "nguyên lý", "cơ chế", "cấu tạo", "hoạt động", "hệ thống", "kỹ thuật", "sơ đồ",
+                "máy móc", "động cơ", "vũ trụ", "hành tinh", "vi mạch", "thuật toán", "công nghệ",
+                "vật lý", "hóa học", "nguyên tử", "laser", "radar", "áp suất", "tần số"
+            ]
+        )
+        if is_science_tech:
+            tech_grammars = ["scientific_technical_schematic", "anatomical_system_breakdown", "data_counter_chart"]
+            return tech_grammars[(scene_idx - 1) % len(tech_grammars)]
+
+        # 4. Horror & Creepy Urban Legend (Articulated 2D Character Rig & Illustrated Environment)
         is_horror = "horror" in cat or any(w in text for w in ["ma", "kinh dị", "quỷ", "bóng đè", "rùng rợn", "ngôi nhà hoang", "nghĩa địa", "tiếng gõ", "nửa đêm", "ác mộng"])
         if is_horror:
             horror_grammars = ["horror_bedroom_flashlight", "horror_dark_corridor", "horror_shadow_encounter", "horror_shock_recoil"]
             return horror_grammars[(scene_idx - 1) % len(horror_grammars)]
 
-        # 2. Historical Narrative (Articulated Military Rigs, Dien Bien Phu Basin, Command Bunker, Victory Flag)
-        is_history = "historical" in cat or any(w in text for w in ["điện biên", "1954", "pháo", "kéo pháo", "tướng", "chỉ huy", "chiến thắng", "kháng chiến", "đờ cát", "de castries", "quân đội", "hào hùng"])
+        # 5. Historical Narrative (Articulated Military Rigs, Dien Bien Phu Basin, Command Bunker, Victory Flag)
+        is_history = "historical" in cat or any(w in text for w in ["điện biên", "1954", "pháo", "kéo pháo", "tướng", "chỉ huy", "chiến thắng", "kháng chiến", "đờ cát", "de castries", "quân đội", "hào hùng", "bạch đằng", "lê lợi", "gươm thần"])
         if is_history:
             history_grammars = ["history_mountain_artillery", "history_command_bunker", "tactical_map", "history_victory_flag"]
             return history_grammars[(scene_idx - 1) % len(history_grammars)]
 
-        # 3. Specific content triggers
+        # 6. Specific content triggers
         if any(w in text for w in ["bản đồ", "thung lũng", "địa cầu", "tây bắc", "núi", "đèo", "lòng chảo", "chiến dịch", "vị trí", "địa điểm", "hướng tiến"]):
             return "tactical_map"
         elif any(w in text for w in ["năm", "tháng", "ngày", "lịch sử", "thời gian", "giai đoạn", "bắt đầu", "kết thúc", "cột mốc"]):
@@ -233,11 +266,12 @@ class HyperFramesAdapter:
         self.preflight_validate_all_audio(scenes)
 
         # Dynamic Aspect Ratio & Resolution Handling (Shorts 9:16 vs Long-form 16:9)
-        video_format = manifest.get("video_format") or manifest.get("video_specs", {}).get("format") or "short-form"
+        video_format = manifest.get("video_format") or manifest.get("format") or manifest.get("video_specs", {}).get("format") or "short-form"
         aspect_ratio = manifest.get("aspect_ratio") or manifest.get("video_specs", {}).get("aspect_ratio") or ("9:16" if video_format == "short-form" else "16:9")
         is_long = video_format == "long-form" or aspect_ratio == "16:9"
         width = 1920 if is_long else 1080
         height = 1080 if is_long else 1920
+        sub_pad_bottom = 110 if is_long else 240
 
         # Prepare BGM and SFX audio files
         bgm_type = "bgm_horror" if "horror" in genre else ("bgm_tech" if "tech" in genre else "bgm_heroic")
@@ -403,40 +437,109 @@ class HyperFramesAdapter:
         overflow: hidden;
       }}
 
-      /* Kinetic Pop Subtitles (@RicksClips3000 Standard) */
+      /* CapCut / TikTok Kinetic Subtitles with "Khung Cam" Sliding/Bouncing Highlight Pill */
       .subtitles-container {{
-        position: absolute;
-        top: 54%;
-        left: 0;
-        right: 0;
-        transform: translateY(-50%);
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-end !important;
+        padding-bottom: {sub_pad_bottom}px !important; /* Dynamic lower third safe zone: 240px for Shorts 9:16, 110px for Long-form 16:9 */
+        z-index: 95;
+        pointer-events: none;
+        text-align: center;
+        padding-left: 35px;
+        padding-right: 35px;
+      }}
+      @media (min-aspect-ratio: 1/1) {{
+        .subtitles-container {{
+          padding-bottom: 110px !important; /* Lower third safe zone for 16:9 Long-form */
+        }}
+      }}
+      .sub-phrase-card {{
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         justify-content: center;
-        padding: 0 40px;
-        gap: 12px 18px;
-        z-index: 50;
-        pointer-events: none;
-        text-align: center;
+        gap: 14px 18px;
+        max-width: 1000px;
+        will-change: transform, opacity;
       }}
-      .sub-word {{
-        font-family: var(--font-primary);
+      .sub-word-box {{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 22px;
+        border-radius: 18px;
+        background: rgba(0, 0, 0, 0.5);
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+        will-change: transform, background-color, border-color, box-shadow;
+      }}
+      .sub-word-text {{
+        font-family: var(--font-primary), 'Montserrat', 'Impact', sans-serif;
         font-size: 58px;
         font-weight: 900;
         text-transform: uppercase;
-        color: #FFFFFF;
+        color: rgba(255, 255, 255, 0.95);
         letter-spacing: -0.01em;
-        -webkit-text-stroke: 10px #000000;
+        -webkit-text-stroke: 8px #000000;
         paint-order: stroke fill;
-        text-shadow: 0 4px 20px rgba(0,0,0,0.9);
-        display: inline-block;
-        transition: none;
+        text-shadow: 0 4px 18px rgba(0,0,0,0.95);
+        line-height: 1.1;
       }}
-      .sub-word.active {{
-        color: var(--accent) !important;
-        transform: scale(1.18);
-        text-shadow: 0 0 25px rgba(250, 204, 21, 0.9), 0 4px 20px rgba(0,0,0,0.9);
+      @media (min-aspect-ratio: 1/1) {{
+        .sub-word-text {{
+          font-size: 42px;
+          -webkit-text-stroke: 6px #000000;
+        }}
+        .sub-word-box {{
+          padding: 8px 18px;
+          border-radius: 14px;
+        }}
+      }}
+
+      /* Anatomical & Scientific HUD Styles */
+      .hud-leader-line {{
+        stroke: #38BDF8;
+        stroke-width: 2.5;
+        stroke-dasharray: 6 4;
+        fill: none;
+      }}
+      .hud-callout-card {{
+        background: rgba(15, 23, 42, 0.88);
+        border: 2px solid #38BDF8;
+        border-radius: 14px;
+        padding: 10px 18px;
+        box-shadow: 0 0 25px rgba(56, 189, 248, 0.35);
+        backdrop-filter: blur(8px);
+      }}
+      .hud-callout-title {{
+        font-family: var(--font-mono);
+        font-size: 16px;
+        font-weight: 900;
+        color: #38BDF8;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }}
+      .hud-callout-val {{
+        font-family: var(--font-primary);
+        font-size: 24px;
+        font-weight: 900;
+        color: #F8FAFC;
+        margin-top: 2px;
+      }}
+      .laser-scan-bar {{
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #38BDF8, #FACC15, #38BDF8, transparent);
+        box-shadow: 0 0 20px #38BDF8, 0 0 40px #38BDF8;
+        z-index: 30;
       }}
 
       /* Vector Map Styles */
@@ -877,6 +980,243 @@ class HyperFramesAdapter:
       tl.fromTo("#{prefix}_spark2", {{ x: 650, y: 1500, opacity: 0 }}, {{ x: 600, y: 850, opacity: 1, duration: {min(3.0, duration)}, ease: "power1.out" }}, {start_time + 0.2});
 """)
 
+        elif grammar == "anatomical_system_breakdown":
+            # Medical / Biological / Anatomical Organ Explainer with Pulsing Heart, ECG Waveform & Telemetry HUD
+            html = f"""
+      <div id="{prefix}_view" class="clip scene-viewport" data-start="{start_time}" data-duration="{duration}" data-track-index="0">
+        <!-- Laser Scan Sweep Line -->
+        <div id="{prefix}_laser" class="laser-scan-bar" style="top: 15%;"></div>
+
+        <!-- Master Camera Rig (Push-in & Pan) -->
+        <div id="{prefix}_camera_rig" style="position: absolute; inset: 0; width: 100%; height: 100%;">
+          <!-- Background Blueprint Grid -->
+          <div style="position: absolute; inset: 20px; border: 1.5px solid rgba(56, 189, 248, 0.2); border-radius: 20px; background-image: radial-gradient(circle, rgba(56, 189, 248, 0.08) 1.5px, transparent 1.5px); background-size: 35px 35px;"></div>
+
+          <!-- Anatomical SVG Centerpiece: Human Heart & Circulatory Engine -->
+          <svg style="position: absolute; inset: 0; width: 100%; height: 100%;" viewBox="0 0 1080 1920">
+            <!-- Defs for organ glow filters & gradients -->
+            <defs>
+              <linearGradient id="{prefix}_aorta_grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#EF4444"/>
+                <stop offset="100%" stop-color="#991B1B"/>
+              </linearGradient>
+              <linearGradient id="{prefix}_pulmonary_grad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#0284C7"/>
+                <stop offset="100%" stop-color="#0369A1"/>
+              </linearGradient>
+              <radialGradient id="{prefix}_heart_tissue" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#DC2626"/>
+                <stop offset="70%" stop-color="#991B1B"/>
+                <stop offset="100%" stop-color="#450A0A"/>
+              </radialGradient>
+              <filter id="{prefix}_glow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="8" result="blur"/>
+                <feMerge>
+                  <feMergeNode in="blur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+            </defs>
+
+            <!-- Pulsing Organ Core -->
+            <g id="{prefix}_heart_core" transform="translate(540, 840)">
+              <!-- Vascular Aorta Arch -->
+              <path d="M -20 -150 C -40 -260 80 -270 90 -160 C 95 -110 50 -80 30 -60" fill="none" stroke="url(#{prefix}_aorta_grad)" stroke-width="48" stroke-linecap="round"/>
+              <!-- Three Aortic Arteries -->
+              <line x1="-10" y1="-220" x2="-25" y2="-280" stroke="#EF4444" stroke-width="14" stroke-linecap="round"/>
+              <line x1="25" y1="-235" x2="25" y2="-295" stroke="#EF4444" stroke-width="14" stroke-linecap="round"/>
+              <line x1="60" y1="-220" x2="75" y2="-280" stroke="#EF4444" stroke-width="14" stroke-linecap="round"/>
+
+              <!-- Pulmonary Artery (Blue/Cyan deoxygenated path) -->
+              <path d="M -70 -120 C -110 -150 -120 -80 -60 -40" fill="none" stroke="url(#{prefix}_pulmonary_grad)" stroke-width="36" stroke-linecap="round"/>
+
+              <!-- Main Muscle Ventricle Body -->
+              <path d="M 0 -80 C -180 -120 -240 80 -60 220 C -20 250 20 250 60 220 C 240 80 180 -120 0 -80 Z" fill="url(#{prefix}_heart_tissue)" filter="url(#{prefix}_glow)"/>
+              
+              <!-- Ventricle Muscular Sulcus / Coronary Artery Branch -->
+              <path id="{prefix}_coronary" d="M -15 -60 Q 20 30 -10 120 Q -25 170 5 210" fill="none" stroke="#FACC15" stroke-width="5" stroke-linecap="round"/>
+              <path d="M 5 20 Q 40 45 65 75" fill="none" stroke="#FACC15" stroke-width="3.5" stroke-linecap="round"/>
+
+              <!-- Internal Cross-Section Valve Chamber Highlight -->
+              <ellipse id="{prefix}_valve" cx="35" cy="50" rx="35" ry="45" fill="none" stroke="#38BDF8" stroke-width="3.5" stroke-dasharray="6 4"/>
+              <circle cx="35" cy="50" r="10" fill="#38BDF8" opacity="0.6"/>
+
+              <!-- Glowing Vascular Blood Flow Pulse Particles -->
+              <circle id="{prefix}_pulse1" cx="-10" cy="-220" r="6" fill="#FEE2E2" filter="url(#{prefix}_glow)"/>
+              <circle id="{prefix}_pulse2" cx="35" cy="50" r="7" fill="#FACC15" filter="url(#{prefix}_glow)"/>
+            </g>
+
+            <!-- Anatomical Leader Lines & Telemetry Callouts -->
+            <!-- Callout 1: Động Mạch Chủ (Aorta) -->
+            <line class="hud-leader-line" x1="610" y1="620" x2="800" y2="520"/>
+            <circle cx="610" cy="620" r="5" fill="#38BDF8"/>
+            <foreignObject x="760" y="470" width="280" height="110">
+              <div class="hud-callout-card">
+                <div class="hud-callout-title">ĐỘNG MẠCH CHỦ (AORTA)</div>
+                <div class="hud-callout-val">ÁP LỰC: 120 mmHg</div>
+              </div>
+            </foreignObject>
+
+            <!-- Callout 2: Tâm Thất & Buồng Bơm (Ventricle) -->
+            <line class="hud-leader-line" x1="575" y1="890" x2="800" y2="980"/>
+            <circle cx="575" cy="890" r="5" fill="#38BDF8"/>
+            <foreignObject x="760" y="930" width="280" height="110">
+              <div class="hud-callout-card">
+                <div class="hud-callout-title">TÂM THẤT TRÁI</div>
+                <div class="hud-callout-val">CÔNG SUẤT: 5.2 L/P</div>
+              </div>
+            </foreignObject>
+
+            <!-- Callout 3: Tần Số Sinh Học / Heart Rate Metric -->
+            <foreignObject x="50" y="470" width="300" height="130">
+              <div class="hud-callout-card" style="border-color: #22C55E;">
+                <div class="hud-callout-title" style="color: #22C55E;">NHỊP TIM SINH HỌC</div>
+                <div class="hud-callout-val" style="color: #22C55E; font-size: 32px;">72 BPM</div>
+                <div style="font-family: var(--font-mono); font-size: 13px; color: #94A3B8; margin-top: 4px;">CHU KỲ: 0.83 GIÂY</div>
+              </div>
+            </foreignObject>
+
+            <!-- Live Animated Electrocardiogram (ECG) Waveform -->
+            <g id="{prefix}_ecg" transform="translate(140, 1340)">
+              <rect x="0" y="0" width="800" height="140" rx="16" fill="rgba(15, 23, 42, 0.9)" stroke="rgba(34, 197, 94, 0.4)" stroke-width="2"/>
+              <!-- ECG Grid -->
+              <line x1="0" y1="70" x2="800" y2="70" stroke="rgba(34, 197, 94, 0.15)" stroke-width="1"/>
+              <!-- Real ECG Wave (P-Q-R-S-T) -->
+              <polyline id="{prefix}_ecg_wave" points="
+                0,70 140,70 160,65 175,70 190,70 200,85 215,20 230,105 240,70 260,70 280,55 310,70 
+                420,70 440,65 455,70 470,70 480,85 495,20 510,105 520,70 540,70 560,55 590,70 700,70 800,70
+              " fill="none" stroke="#22C55E" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" filter="url(#{prefix}_glow)"/>
+              <text x="30" y="40" font-family="var(--font-mono)" font-size="16" fill="#22C55E" font-weight="bold">ECG TELEMETRY [LEAD II]</text>
+            </g>
+          </svg>
+        </div>
+      </div>"""
+            tweens.append(f"""
+      // 1. Rhythmic Heartbeat Pulsation Cycle (72 BPM)
+      tl.to("#{prefix}_heart_core", {{ scale: 1.09, duration: 0.16, ease: "power2.out", yoyo: true, repeat: {max(8, int(duration * 2.4))}, transformOrigin: "center center" }}, {start_time});
+      tl.to("#{prefix}_pulse1, #{prefix}_pulse2", {{ scale: 1.5, opacity: 0.4, duration: 0.16, yoyo: true, repeat: {max(8, int(duration * 2.4))} }}, {start_time});
+
+      // 2. Dynamic Camera Choreography: Push-in Macro Zoom & Pan
+      tl.fromTo("#{prefix}_camera_rig", 
+        {{ scale: 1.0, x: 0, y: 0 }}, 
+        {{ scale: 1.35, x: -70, y: -90, duration: {duration}, ease: "power1.inOut" }}, 
+        {start_time}
+      );
+
+      // 3. Laser Scanline Sweep across Organ
+      tl.fromTo("#{prefix}_laser", {{ top: "15%", opacity: 0 }}, {{ top: "85%", opacity: 0.9, duration: {min(4.0, duration)}, ease: "none" }}, {start_time + 0.3});
+
+      // 4. Live ECG Waveform Sweep
+      tl.fromTo("#{prefix}_ecg_wave", {{ strokeDasharray: 900, strokeDashoffset: 900 }}, {{ strokeDashoffset: 0, duration: {duration}, ease: "none" }}, {start_time});
+""")
+
+        elif grammar == "scientific_technical_schematic":
+            # Multi-topic Engineering & Science Blueprint Schematic with Radar Scanner & Metrics
+            words = narration.split()
+            concept_title = " ".join(words[:4]).upper() if len(words) >= 4 else "CƠ CHẾ KHOA HỌC"
+            html = f"""
+      <div id="{prefix}_view" class="clip scene-viewport" data-start="{start_time}" data-duration="{duration}" data-track-index="0">
+        <!-- Blueprint Grid -->
+        <div style="position: absolute; inset: 30px; border: 2px solid rgba(56, 189, 248, 0.25); border-radius: 20px; background-image: linear-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(56, 189, 248, 0.08) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+        <!-- Camera Rig for Dynamic Pan -->
+        <div id="{prefix}_schematic_cam" style="position: absolute; inset: 0; width: 100%; height: 100%;">
+          <svg style="position: absolute; inset: 0; width: 100%; height: 100%;" viewBox="0 0 1080 1920">
+            <!-- Center Rotating Radar / Synapse Core -->
+            <g id="{prefix}_radar_core" transform="translate(540, 800)">
+              <circle cx="0" cy="0" r="220" fill="none" stroke="#38BDF8" stroke-width="2" stroke-dasharray="10 5" opacity="0.6"/>
+              <circle cx="0" cy="0" r="150" fill="none" stroke="#38BDF8" stroke-width="3" opacity="0.8"/>
+              <circle cx="0" cy="0" r="80" fill="rgba(56, 189, 248, 0.15)" stroke="#38BDF8" stroke-width="2.5"/>
+              <!-- Crosshair Axes -->
+              <line x1="-260" y1="0" x2="260" y2="0" stroke="#38BDF8" stroke-width="1.5" opacity="0.5"/>
+              <line x1="0" y1="-260" x2="0" y2="260" stroke="#38BDF8" stroke-width="1.5" opacity="0.5"/>
+              <!-- Rotating Sweep Line -->
+              <line id="{prefix}_sweep" x1="0" y1="0" x2="160" y2="-160" stroke="#FACC15" stroke-width="4" stroke-linecap="round"/>
+            </g>
+
+            <!-- Header Badge -->
+            <foreignObject x="80" y="240" width="920" height="150">
+              <div style="text-align: center;">
+                <span style="font-family: var(--font-mono); font-size: 18px; color: #38BDF8; letter-spacing: 0.15em; font-weight: 800;">SƠ ĐỒ NGUYÊN LÝ CHUYÊN SÂU</span>
+                <h2 style="font-family: var(--font-primary); font-size: 46px; color: #FFFFFF; font-weight: 900; margin-top: 6px; letter-spacing: -0.02em;">{concept_title}</h2>
+              </div>
+            </foreignObject>
+
+            <!-- Metric Cards -->
+            <foreignObject x="80" y="1120" width="430" height="140">
+              <div class="hud-callout-card">
+                <div class="hud-callout-title">HIỆU SUẤT VẬN HÀNH</div>
+                <div class="hud-callout-val" style="color: #38BDF8; font-size: 32px;">98.4%</div>
+                <div style="font-family: var(--font-mono); font-size: 13px; color: #94A3B8;">TỐI ƯU HÓA HOÀN HẢO</div>
+              </div>
+            </foreignObject>
+            <foreignObject x="570" y="1120" width="430" height="140">
+              <div class="hud-callout-card" style="border-color: #FACC15;">
+                <div class="hud-callout-title" style="color: #FACC15;">TẦN SỐ ĐIỀU BIÊN</div>
+                <div class="hud-callout-val" style="color: #FACC15; font-size: 32px;">4.85 GHz</div>
+                <div style="font-family: var(--font-mono); font-size: 13px; color: #94A3B8;">BĂNG THÔNG MỞ RỘNG</div>
+              </div>
+            </foreignObject>
+          </svg>
+        </div>
+      </div>"""
+            tweens.append(f"""
+      // Rotating Radar Sweep Line
+      tl.to("#{prefix}_sweep", {{ rotation: 360, transformOrigin: "0px 0px", duration: 3.0, repeat: -1, ease: "none" }}, {start_time});
+      // Camera Pan & Gentle Zoom
+      tl.fromTo("#{prefix}_schematic_cam", 
+        {{ scale: 1.0, x: 40 }}, 
+        {{ scale: 1.15, x: -40, duration: {duration}, ease: "power1.inOut" }}, 
+        {start_time}
+      );
+""")
+
+        elif grammar == "narrator_expert_explainer":
+            # Human Presenter / Medical Doctor with Lip-Sync Talking Mouth Flap & Head Tilt
+            char = CharacterRig2D.render_character_svg(
+                f"{prefix}_doctor",
+                archetype="expert_presenter",
+                pose="explaining_pointer",
+                expression="confident_explaining",
+                x=360,
+                y=1220,
+                scale=1.05,
+                duration=duration
+            )
+            html = f"""
+      <div id="{prefix}_view" class="clip scene-viewport" data-start="{start_time}" data-duration="{duration}" data-track-index="0">
+        <!-- Modern Clinical / High-Tech Studio Backdrop -->
+        <div style="position: absolute; inset: 0; background: radial-gradient(circle at 65% 40%, #0F172A 0%, #020617 100%);"></div>
+        <div style="position: absolute; right: 60px; top: 280px; width: 440px; height: 500px; border: 2px solid rgba(56, 189, 248, 0.3); border-radius: 20px; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(10px); padding: 24px;">
+          <div style="font-family: var(--font-mono); font-size: 15px; color: #38BDF8; font-weight: 800; letter-spacing: 0.1em; border-bottom: 1px solid rgba(56, 189, 248, 0.2); pb: 8px;">
+            HỒ SƠ PHÂN TÍCH CHUYÊN GIA
+          </div>
+          <div style="margin-top: 18px; font-family: var(--font-primary); font-size: 26px; font-weight: 800; color: #FFFFFF; line-height: 1.3;">
+            Giải thích chi tiết cơ chế hoạt động
+          </div>
+          <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="background: rgba(56, 189, 248, 0.1); border-left: 3px solid #38BDF8; padding: 8px 12px; font-size: 14px; color: #E2E8F0; font-family: var(--font-mono);">
+              Mức độ tin cậy: 99.8%
+            </div>
+            <div style="background: rgba(34, 197, 94, 0.1); border-left: 3px solid #22C55E; padding: 8px 12px; font-size: 14px; color: #E2E8F0; font-family: var(--font-mono);">
+              Trạng thái: Đang trình bày
+            </div>
+          </div>
+        </div>
+
+        <!-- Vector Articulated Presenter -->
+        <svg style="position: absolute; inset: 0; width: 100%; height: 100%;" viewBox="0 0 1080 1920">
+          {char["svg"]}
+        </svg>
+      </div>"""
+            adapted = [t.replace("tl.", f"{prefix}_tl.") for t in char["tweens"]]
+            tweens.append(f"""
+      const {prefix}_tl = gsap.timeline();
+      {chr(10).join(adapted)}
+      {prefix}_tl.fromTo("#{prefix}_view", {{ scale: 0.98 }}, {{ scale: 1.04, duration: {duration}, ease: "none" }}, 0.0);
+      tl.add({prefix}_tl, {start_time});
+""")
+
         else: # kinetic_statement
             words = narration.split()
             headline = " ".join(words[:5]) if len(words) >= 5 else narration
@@ -906,41 +1246,118 @@ class HyperFramesAdapter:
         narration: str,
         subtitles_json: List[Dict[str, Any]]
     ) -> (str, List[str]):
-        """Renders kinetic pop subtitles word-by-word bouncing highlight."""
+        """
+        Renders CapCut / TikTok / Instagram Reels standard kinetic subtitles:
+        1. Phrase chunking (2-4 words per card, default 3 words) so only the current phrase is on screen.
+        2. Dynamic "Khung Cam" (Vibrant Orange/Gold glowing pill badge) leaping under/behind the active word.
+        3. Word-by-word bouncing highlight (scale 1.25, high-contrast glow, #FF6B00 / #FACC15).
+        4. Automatic alignment with real TTS millisecond word boundaries.
+        """
         words = narration.split()
         if not words:
             return "", []
 
-        container_id = f"subs_{scene_idx}"
-        spans = []
-        tweens = []
-
         total_words = len(words)
         approx_word_dur = max(0.18, duration / total_words)
 
+        # Build list of word timings
+        word_items = []
         for w_idx, w in enumerate(words):
-            word_id = f"w_{scene_idx}_{w_idx}"
             clean_text = re.sub(r'[^\w\s-]', '', w) or w
-            spans.append(f'<span id="{word_id}" class="sub-word">{clean_text}</span>')
-
-            # Word start and end in timeline seconds
             if subtitles_json and w_idx < len(subtitles_json):
                 w_start_ms = subtitles_json[w_idx].get("start_ms", int(w_idx * approx_word_dur * 1000))
                 w_end_ms = subtitles_json[w_idx].get("end_ms", int((w_idx + 1) * approx_word_dur * 1000))
                 w_time = start_time + round(w_start_ms / 1000.0, 3)
-                w_dur = max(0.15, round((w_end_ms - w_start_ms) / 1000.0, 3))
+                w_dur = max(0.14, round((w_end_ms - w_start_ms) / 1000.0, 3))
             else:
                 w_time = start_time + round(w_idx * approx_word_dur, 3)
-                w_dur = max(0.15, round(approx_word_dur, 3))
+                w_dur = max(0.14, round(approx_word_dur, 3))
 
+            word_items.append({
+                "index": w_idx,
+                "text": clean_text,
+                "time": w_time,
+                "duration": w_dur,
+                "end_time": w_time + w_dur,
+                "id": f"w_{scene_idx}_{w_idx}",
+                "box_id": f"wbox_{scene_idx}_{w_idx}"
+            })
+
+        # Chunk words into groups of 3 (or 2-4) words per card so subtitle doesn't dump whole paragraph on screen
+        CHUNK_SIZE = 3
+        chunks = []
+        for i in range(0, len(word_items), CHUNK_SIZE):
+            chunk_slice = word_items[i:i + CHUNK_SIZE]
+            chunks.append(chunk_slice)
+
+        chunk_html_parts = []
+        tweens = []
+
+        for c_idx, chunk in enumerate(chunks):
+            chunk_id = f"sub_chunk_{scene_idx}_{c_idx}"
+            c_start = chunk[0]["time"]
+            c_end = chunk[-1]["end_time"]
+            c_dur = max(0.3, round(c_end - c_start, 3))
+
+            word_elements = []
+            for w in chunk:
+                # Individual word wrapped with a dedicated "khung cam" highlight pill badge container
+                word_elements.append(f"""
+                  <div id="{w['box_id']}" class="sub-word-box">
+                    <span id="{w['id']}" class="sub-word-text">{w['text']}</span>
+                  </div>
+                """)
+
+            chunk_html_parts.append(f"""
+              <div id="{chunk_id}" class="sub-phrase-card" style="opacity: 0; display: none;">
+                {''.join(word_elements)}
+              </div>
+            """)
+
+            # Animate phrase chunk card entry and exit
             tweens.append(f"""
-      tl.to("#{word_id}", {{ className: "sub-word active", duration: 0.05 }}, {w_time});
-      tl.to("#{word_id}", {{ className: "sub-word", duration: 0.05 }}, {w_time + w_dur});
+      // Chunk {scene_idx}_{c_idx} appearance
+      tl.set("#{chunk_id}", {{ display: "flex", opacity: 0, scale: 0.88, y: 15 }}, {c_start - 0.04});
+      tl.to("#{chunk_id}", {{ opacity: 1, scale: 1.0, y: 0, duration: 0.14, ease: "back.out(2)" }}, {c_start});
+      tl.to("#{chunk_id}", {{ opacity: 0, scale: 0.95, y: -10, duration: 0.1, ease: "power1.in" }}, {c_end});
+      tl.set("#{chunk_id}", {{ display: "none" }}, {c_end + 0.11});
+""")
+
+            # Word-by-word bouncing "Khung Cam" pill highlight within this chunk
+            for w in chunk:
+                # Active word highlight: vibrant orange gradient badge (#FF6B00 / #FF3D00) with scale pop
+                tweens.append(f"""
+      tl.to("#{w['box_id']}", {{
+        scale: 1.24,
+        backgroundColor: "rgba(255, 87, 34, 0.96)",
+        borderColor: "#FFE082",
+        boxShadow: "0 0 32px rgba(255, 107, 0, 0.95), 0 4px 15px rgba(0,0,0,0.8)",
+        duration: 0.08,
+        ease: "back.out(2.5)"
+      }}, {w['time']});
+      tl.to("#{w['id']}", {{
+        color: "#FFFFFF",
+        textShadow: "0 0 20px #FFE082, 0 4px 10px rgba(0,0,0,0.9)",
+        duration: 0.08
+      }}, {w['time']});
+      tl.to("#{w['box_id']}", {{
+        scale: 1.0,
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        borderColor: "rgba(255, 255, 255, 0.2)",
+        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.7)",
+        duration: 0.12,
+        ease: "power2.inOut"
+      }}, {w['end_time']});
+      tl.to("#{w['id']}", {{
+        color: "rgba(255, 255, 255, 0.95)",
+        textShadow: "0 4px 18px rgba(0,0,0,0.95)",
+        duration: 0.12
+      }}, {w['end_time']});
 """)
 
         html = f"""
-      <div id="{container_id}" class="clip subtitles-container" data-layout-allow-safe-zone="true" data-layout-allow-overlap="true" data-start="{start_time}" data-duration="{duration}" data-track-index="4">
-        {''.join(spans)}
+      <div id="subs_{scene_idx}" class="clip subtitles-container" data-layout-ignore="true" data-layout-allow-safe-zone="true" data-layout-allow-overlap="true" data-start="{start_time}" data-duration="{duration}" data-track-index="4">
+        {''.join(chunk_html_parts)}
       </div>"""
 
         return html, tweens

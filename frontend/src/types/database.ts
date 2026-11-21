@@ -119,6 +119,8 @@ export interface SceneItem {
   subtitles_json: SubtitleItem[];
   assets?: SceneAsset[];
   audio_url?: string;
+  audio_id?: string;
+  audio_filename?: string;
   transition?: string;
   transition_type?: string;
   music_direction?: string;

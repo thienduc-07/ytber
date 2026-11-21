@@ -593,8 +593,8 @@ class AIDirectorEngine:
         rapid_beats = []
         for sent in initial_sentences:
             words = sent.split()
-            # If short sentence (under 10 words), it forms 1 punchy scene
-            if len(words) <= 10:
+            # If sentence is reasonably concise (under 14 words), keep as 1 complete punchy scene
+            if len(words) <= 14:
                 rapid_beats.append(sent)
             else:
                 # Split along clause markers (commas, semicolons, colons, dashes)
@@ -602,10 +602,12 @@ class AIDirectorEngine:
                 if len(clauses) >= 2:
                     rapid_beats.extend(clauses)
                 else:
-                    # Split in half to maintain 1.8s - 3.2s rapid visual cut rhythm
-                    mid = len(words) // 2
-                    rapid_beats.append(" ".join(words[:mid]))
-                    rapid_beats.append(" ".join(words[mid:]))
+                    # Look for natural syntactic conjunctions if sentence is very long
+                    conjunction_split = re.split(r'\s+(?=và|nhưng|rồi|để|khi|trong khi)\s+', sent)
+                    if len(conjunction_split) >= 2 and all(len(p.split()) >= 3 for p in conjunction_split):
+                        rapid_beats.extend([p.strip() for p in conjunction_split])
+                    else:
+                        rapid_beats.append(sent)
 
         scenes_text = [b for b in rapid_beats if len(b.split()) >= 2]
         if not scenes_text:

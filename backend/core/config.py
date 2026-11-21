@@ -50,4 +50,12 @@ class Settings(BaseSettings):
     ASSET_DOWNLOAD_TIMEOUT_SECONDS: float = 15.0
     ASSET_CACHE_ENABLED: bool = True
 
+    # HyperFrames Render Worker & Pipeline
+    RENDER_STORAGE_PATH: str = "./data/renders"
+    RENDER_WORKER_MODE: str = "inline"
+    RENDER_MAX_CONCURRENCY: int = 2
+    RENDER_OVERALL_TIMEOUT_SECONDS: float = 480.0
+    RENDER_INACTIVITY_TIMEOUT_SECONDS: float = 90.0
+    RENDER_LOW_MEMORY_MODE: bool = True
+
 settings = Settings()

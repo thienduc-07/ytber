@@ -199,6 +199,20 @@ class VietnameseTextNormalizer:
             pattern = re.compile(rf'\b{re.escape(eng)}\b', re.IGNORECASE)
             res = pattern.sub(vn, res)
 
+        # 4. Neural prosody fixes for known Azure TTS tokenizer edge-cases
+        azure_edge_cases = {
+            r'\bđờ\s+cát\b': 'Đờ-cát',
+            r'\bcẩu\s+đại\s+bác\b': 'khẩu đại bác',
+            r'\btiếng\s+động\b': 'tiếng-động',
+            r'\bnặng\s+hàng\s+tấn\b': 'nặng nhiều tấn',
+            r'\bhàng\s+tấn\b': 'nhiều tấn',
+            r'\btiếng\s+bước\s+chân\b': 'tiếng bước-chân',
+            r'\btim\s+tôi\b': 'trái tim tôi',
+            r'\bvang\s+dội\b': 'vang, dội',
+        }
+        for pat, repl in azure_edge_cases.items():
+            res = re.sub(pat, repl, res, flags=re.IGNORECASE)
+
         return re.sub(r'\s+', ' ', res).strip()
 
 VOICE_REGISTRY: Dict[str, Dict[str, Any]] = {
@@ -270,8 +284,34 @@ class EdgeTTSVoiceProvider(VoiceProvider):
         self._storage_dir = storage_dir
 
         max_conc = getattr(settings, "MAX_TTS_CONCURRENCY", 2)
-        self._semaphore = asyncio.Semaphore(max_conc)
-        self._cache_locks: Dict[str, asyncio.Lock] = {}
+        self._max_conc = max_conc
+        self._semaphores: Dict[Any, asyncio.Semaphore] = {}
+        self._cache_locks_by_loop: Dict[Any, Dict[str, asyncio.Lock]] = {}
+
+    @property
+    def semaphore(self) -> asyncio.Semaphore:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+        if loop not in self._semaphores:
+            self._semaphores[loop] = asyncio.Semaphore(self._max_conc)
+        return self._semaphores[loop]
+
+    @property
+    def _semaphore(self) -> asyncio.Semaphore:
+        return self.semaphore
+
+    def _get_cache_lock(self, cache_key: str) -> asyncio.Lock:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+        if loop not in self._cache_locks_by_loop:
+            self._cache_locks_by_loop[loop] = {}
+        if cache_key not in self._cache_locks_by_loop[loop]:
+            self._cache_locks_by_loop[loop][cache_key] = asyncio.Lock()
+        return self._cache_locks_by_loop[loop][cache_key]
 
     @property
     def storage_dir(self) -> str:
@@ -312,8 +352,13 @@ class EdgeTTSVoiceProvider(VoiceProvider):
         # Vietnamese neural voices in Microsoft Edge-TTS do not support boundary='WordBoundary'
         # and reject the stream with NoAudioReceived. We omit boundary so it defaults to
         # SentenceBoundary / standard binary audio stream.
+        # Azure TTS requires sentence terminal punctuation for pitch contour calculation.
+        clean_chunk = chunk_text.strip()
+        if clean_chunk and clean_chunk[-1] not in ('.', '!', '?', ';', ':', ','):
+            clean_chunk += '.'
+
         communicate = edge_tts.Communicate(
-            text=chunk_text,
+            text=clean_chunk,
             voice=voice,
             **comm_kwargs
         )
@@ -348,11 +393,11 @@ class EdgeTTSVoiceProvider(VoiceProvider):
         rate: str,
         pitch: str,
         volume: str,
-        max_retries: int = 2
+        max_retries: int = 3
     ) -> Tuple[bytes, List[Dict[str, Any]]]:
         """
         Synthesizes a single text chunk with concurrency control, timeout, and jittered backoff.
-        Automatically falls back to alternate Vietnamese neural voice if primary voice encounters NoAudioReceived.
+        Automatically falls back across prosodic punctuation variants and alternate Vietnamese neural voices.
         """
         timeout_sec = getattr(settings, "TTS_TIMEOUT_SECONDS", 30.0)
         last_error = None
@@ -363,28 +408,38 @@ class EdgeTTSVoiceProvider(VoiceProvider):
         if alt_voice not in voices_to_try:
             voices_to_try.append(alt_voice)
 
+        clean = chunk_text.strip()
+        base_clean = clean.rstrip(".!?,;:")
+        punctuation_variants = [clean]
+        for p in [",", ".", "!"]:
+            cand = f"{base_clean}{p}"
+            if cand not in punctuation_variants:
+                punctuation_variants.append(cand)
+
         for curr_voice in voices_to_try:
-            for attempt in range(max_retries):
-                try:
-                    async with self._semaphore:
-                        return await self._synthesize_single_chunk(
-                            chunk_text=chunk_text,
-                            voice=curr_voice,
-                            rate=rate,
-                            pitch=pitch,
-                            volume=volume,
-                            timeout_sec=timeout_sec
-                        )
-                except asyncio.CancelledError:
-                    raise
-                except Exception as e:
-                    last_error = e
-                    if attempt == max_retries - 1:
-                        logger.warning(f"Voice {curr_voice} failed for chunk after {max_retries} retries: {e}. Trying alternate voice if available...")
-                        break
-                    # Exponential backoff with jitter
-                    delay = (0.5 * (2 ** attempt)) + random.uniform(0.1, 0.4)
-                    await asyncio.sleep(delay)
+            for text_variant in punctuation_variants:
+                for attempt in range(max_retries):
+                    try:
+                        async with self.semaphore:
+                            return await self._synthesize_single_chunk(
+                                chunk_text=text_variant,
+                                voice=curr_voice,
+                                rate=rate,
+                                pitch=pitch,
+                                volume=volume,
+                                timeout_sec=timeout_sec
+                            )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        last_error = e
+                        if attempt == max_retries - 1:
+                            break
+                        # Exponential backoff with jitter
+                        delay = (0.4 * (2 ** attempt)) + random.uniform(0.1, 0.3)
+                        await asyncio.sleep(delay)
+
+            logger.warning(f"Voice {curr_voice} failed for chunk across all punctuation variants: {last_error}. Trying alternate voice...")
 
         raise RuntimeError(f"Edge-TTS chunk synthesis failed across neural voices: {str(last_error)}")
 
@@ -432,11 +487,8 @@ class EdgeTTSVoiceProvider(VoiceProvider):
                 except Exception:
                     pass  # If cache file corrupt, regenerate
 
-        # Concurrent deduplication lock per cache_key
-        if cache_key not in self._cache_locks:
-            self._cache_locks[cache_key] = asyncio.Lock()
-
-        async with self._cache_locks[cache_key]:
+        # Concurrent deduplication lock per cache_key bound to current loop
+        async with self._get_cache_lock(cache_key):
             # Double check cache after acquiring lock
             if os.path.exists(audio_filepath) and os.path.exists(meta_filepath):
                 try:

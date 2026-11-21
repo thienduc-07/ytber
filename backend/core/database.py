@@ -60,42 +60,44 @@ def init_db_sync() -> None:
             cursor.close()
 
     Base.metadata.create_all(sync_engine)
-    if "sqlite" in sync_url:
-        with sync_engine.connect() as conn:
-            try:
-                conn.execute(text("DROP INDEX IF EXISTS ix_audio_files_filename;"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audio_files_filename ON audio_files (filename);"))
-                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_filename_user ON audio_files (filename, user_id);"))
-                # Add columns to render_jobs if they do not exist
-                new_cols = [
-                    ("stage_text", "VARCHAR(255) DEFAULT 'Đang chờ xếp hàng...'"),
-                    ("output_mp4_path", "VARCHAR(512)"),
-                    ("duration_seconds", "FLOAT DEFAULT 0.0"),
-                    ("file_size_bytes", "INTEGER DEFAULT 0"),
-                    ("resolution", "VARCHAR(32) DEFAULT '1080x1920'"),
-                    ("video_format", "VARCHAR(32) DEFAULT 'short-form'"),
-                    ("manifest_json", "JSON"),
-                    ("last_error", "TEXT"),
-                    ("worker_id", "VARCHAR(64)"),
-                    ("attempt_count", "INTEGER DEFAULT 0"),
-                    ("max_attempts", "INTEGER DEFAULT 3"),
-                    ("heartbeat_at", "VARCHAR(32)"),
-                    ("started_at", "VARCHAR(32)"),
-                    ("lease_expires_at", "VARCHAR(32)"),
-                    ("cancel_requested_at", "VARCHAR(32)"),
-                    ("updated_at", "VARCHAR(32)")
-                ]
-                for col_name, col_type in new_cols:
-                    try:
+    with sync_engine.connect() as conn:
+        try:
+            conn.execute(text("DROP INDEX IF EXISTS ix_audio_files_filename;"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audio_files_filename ON audio_files (filename);"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_filename_user ON audio_files (filename, user_id);"))
+            # Add columns to render_jobs if they do not exist (SQLite and PostgreSQL compatible)
+            new_cols = [
+                ("stage_text", "VARCHAR(255) DEFAULT 'Đang chờ xếp hàng...'"),
+                ("output_mp4_path", "VARCHAR(512)"),
+                ("duration_seconds", "FLOAT DEFAULT 0.0"),
+                ("file_size_bytes", "INTEGER DEFAULT 0"),
+                ("resolution", "VARCHAR(32) DEFAULT '1080x1920'"),
+                ("video_format", "VARCHAR(32) DEFAULT 'short-form'"),
+                ("manifest_json", "JSON"),
+                ("last_error", "TEXT"),
+                ("worker_id", "VARCHAR(64)"),
+                ("attempt_count", "INTEGER DEFAULT 0"),
+                ("max_attempts", "INTEGER DEFAULT 3"),
+                ("heartbeat_at", "VARCHAR(32)"),
+                ("started_at", "VARCHAR(32)"),
+                ("lease_expires_at", "VARCHAR(32)"),
+                ("cancel_requested_at", "VARCHAR(32)"),
+                ("updated_at", "VARCHAR(32)")
+            ]
+            for col_name, col_type in new_cols:
+                try:
+                    if "postgresql" in sync_url or "postgres" in sync_url:
+                        conn.execute(text(f"ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS {col_name} {col_type};"))
+                    else:
                         conn.execute(text(f"ALTER TABLE render_jobs ADD COLUMN {col_name} {col_type};"))
-                    except Exception:
-                        pass
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_render_jobs_status ON render_jobs (status);"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_render_jobs_worker ON render_jobs (worker_id);"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_render_jobs_lease ON render_jobs (lease_expires_at);"))
-                conn.commit()
-            except Exception:
-                pass
+                except Exception:
+                    pass
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_render_jobs_status ON render_jobs (status);"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_render_jobs_worker ON render_jobs (worker_id);"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_render_jobs_lease ON render_jobs (lease_expires_at);"))
+            conn.commit()
+        except Exception:
+            pass
     sync_engine.dispose()
 
 async def init_db() -> None:

@@ -25,6 +25,7 @@ import json
 import shutil
 import subprocess
 from typing import Dict, Any, List, Optional
+from backend.core.config import settings
 from backend.providers.tts_engine import UnifiedTTSProvider, WordTiming, validate_audio_file
 from backend.providers.character_rig_2d import CharacterRig2D
 from backend.providers.environment_builder_2d import EnvironmentBuilder2D
@@ -131,6 +132,72 @@ class HyperFramesAdapter:
             grammars = ["tactical_map", "historical_timeline", "data_counter_chart", "archival_blueprint", "parallax_environment", "kinetic_statement"]
             return grammars[scene_idx % len(grammars)]
 
+    def resolve_scene_voiceover_path(self, scene: Dict[str, Any], s_order: int) -> str:
+        """
+        Resolves genuine narration audio file with traversal protection and strict ordering:
+        1. scene.get("audio_file_path")
+        2. os.path.join(settings.AUDIO_STORAGE_PATH, clean_filename)
+        3. os.path.abspath(os.path.join("./data/audio", clean_filename))
+        4. scene.get("audio_url") local file path if absolute or relative
+        """
+        audio_file_path = scene.get("audio_file_path")
+        audio_url = scene.get("audio_url") or ""
+        audio_id = scene.get("audio_id") or ""
+        audio_filename = scene.get("audio_filename") or ""
+
+        clean_filename = ""
+        if audio_filename:
+            clean_filename = os.path.basename(audio_filename.strip())
+        elif audio_url:
+            url_clean = audio_url.split("?")[0].strip()
+            clean_filename = os.path.basename(url_clean)
+        elif audio_id:
+            clean_filename = audio_id if audio_id.endswith(".mp3") else f"{audio_id}.mp3"
+            clean_filename = os.path.basename(clean_filename.strip())
+
+        candidates = []
+        # Candidate 1: Explicit audio_file_path from TTS Result
+        if audio_file_path and isinstance(audio_file_path, str):
+            candidates.append(os.path.abspath(audio_file_path))
+
+        # Candidate 2: Configured audio storage path
+        storage_root = getattr(settings, "AUDIO_STORAGE_PATH", "./data/audio")
+        if clean_filename:
+            safe_filename = "".join(c for c in clean_filename if c.isalnum() or c in (".", "_", "-"))
+            if safe_filename:
+                candidates.append(os.path.abspath(os.path.join(storage_root, safe_filename)))
+                candidates.append(os.path.abspath(os.path.join("./data/audio", safe_filename)))
+
+        # Candidate 3: audio_url path if on local filesystem
+        if audio_url:
+            url_clean = audio_url.split("?")[0].strip()
+            if os.path.isabs(url_clean):
+                candidates.append(os.path.abspath(url_clean))
+            elif url_clean.startswith("/api/v1/tts/audio/"):
+                fname = url_clean.replace("/api/v1/tts/audio/", "")
+                safe_fname = "".join(c for c in fname if c.isalnum() or c in (".", "_", "-"))
+                candidates.append(os.path.abspath(os.path.join(storage_root, safe_fname)))
+                candidates.append(os.path.abspath(os.path.join("./data/audio", safe_fname)))
+
+        for p in candidates:
+            if p and os.path.exists(p) and os.path.getsize(p) > 200:
+                is_valid, _ = validate_audio_file(p)
+                if is_valid:
+                    return p
+
+        searched = ", ".join(candidates) if candidates else "No candidates generated"
+        raise RuntimeError(
+            f"Missing or corrupted narration voiceover for scene {s_order}: '{clean_filename}'. "
+            f"Searched paths: [{searched}]. "
+            "Production pipeline strictly prohibits substituting fake audio or silence for voiceover."
+        )
+
+    def preflight_validate_all_audio(self, scenes: List[Dict[str, Any]]):
+        """Preflight validates that all scenes possess valid non-silent voiceover audio before generating project."""
+        for idx, scene in enumerate(scenes):
+            s_order = idx + 1
+            self.resolve_scene_voiceover_path(scene, s_order)
+
     def generate_html_composition(self, manifest: Dict[str, Any], job_dir: str) -> str:
         """
         Generates index.html adhering 100% to the HyperFrames composition contract:
@@ -144,6 +211,9 @@ class HyperFramesAdapter:
         fps = manifest.get("video_specs", {}).get("fps", 30)
         total_duration = max(5.0, manifest.get("total_duration_sec", 10.0))
         genre = manifest.get("genre", "historical_doc")
+
+        # Preflight validation: verify all scene audio exists and is valid before rendering
+        self.preflight_validate_all_audio(scenes)
 
         # Dynamic Aspect Ratio & Resolution Handling (Shorts 9:16 vs Long-form 16:9)
         video_format = manifest.get("video_format") or manifest.get("video_specs", {}).get("format") or "short-form"
@@ -187,41 +257,11 @@ class HyperFramesAdapter:
             grammar = self.select_visual_grammar(scene, s_order, len(scenes), genre)
 
             # Bus 1: Copy Genuine Voiceover Audio (Never fake tones)
-            audio_url = scene.get("audio_url") or ""
-            audio_id = scene.get("audio_id") or ""
             voice_rel_path = f"assets/audio/voice_{idx}.mp3"
             voice_dest_path = os.path.join(job_dir, voice_rel_path)
 
-            clean_filename = ""
-            if audio_url:
-                url_without_params = audio_url.split("?")[0]
-                clean_filename = os.path.basename(url_without_params)
-            elif audio_id:
-                clean_filename = audio_id if audio_id.endswith(".mp3") else f"{audio_id}.mp3"
-
-            possible_paths = []
-            if clean_filename:
-                possible_paths.extend([
-                    os.path.join("./data/audio", clean_filename),
-                    os.path.abspath(os.path.join("./data/audio", clean_filename)),
-                ])
-            if audio_url and os.path.isabs(audio_url.split("?")[0]):
-                possible_paths.append(audio_url.split("?")[0])
-
-            copied = False
-            for p in possible_paths:
-                if p and os.path.exists(p) and os.path.getsize(p) > 200:
-                    is_valid, _ = validate_audio_file(p)
-                    if is_valid:
-                        shutil.copy2(p, voice_dest_path)
-                        copied = True
-                        break
-
-            if not copied:
-                raise RuntimeError(
-                    f"Missing or corrupted narration voiceover for scene {s_order}: '{clean_filename}'. "
-                    "Production pipeline strictly prohibits substituting fake audio or silence for voiceover."
-                )
+            source_audio_path = self.resolve_scene_voiceover_path(scene, s_order)
+            shutil.copy2(source_audio_path, voice_dest_path)
 
             # Bus 1: Voiceover tag
             audio_elements.append(

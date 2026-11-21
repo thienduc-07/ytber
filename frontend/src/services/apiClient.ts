@@ -532,7 +532,7 @@ export const apiClient = {
     return await res.json();
   },
 
-  async getRenderStatus(jobId: string): Promise<{
+  async getRenderStatus(jobId: string, signal?: AbortSignal): Promise<{
     job_id: string;
     status: string;
     progress_percent: number;
@@ -544,8 +544,13 @@ export const apiClient = {
     error_message?: string;
   }> {
     const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE}/render/status/${jobId}`, { headers });
-    if (!res.ok) throw new Error(`Lấy trạng thái kết xuất thất bại (${res.status})`);
+    const res = await fetch(`${API_BASE}/render/status/${jobId}`, { headers, signal });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      const error: any = new Error(errBody.detail || `Lấy trạng thái kết xuất thất bại (${res.status})`);
+      error.status = res.status;
+      throw error;
+    }
     return await res.json();
   },
 

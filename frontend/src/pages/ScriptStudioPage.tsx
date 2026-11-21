@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { RemotionPlayer } from '../components/video/RemotionPlayer';
 import { StoryboardEditor } from '../components/storyboard/StoryboardEditor';
+import { TimelineEditor } from '../components/storyboard/TimelineEditor';
 import { RenderModal } from '../components/video/RenderModal';
 import { apiClient, getAuthHeaders } from '../services/apiClient';
 import type { SceneManifest, SceneItem, Project, GenreInfo, VoiceInfo } from '../types/database';
@@ -31,6 +32,8 @@ export const ScriptStudioPage: React.FC = () => {
   const [isVoiceTesting, setIsVoiceTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeSceneIndex, setActiveSceneIndex] = useState(0);
+  const [editorMode, setEditorMode] = useState<'timeline' | 'cards'>('timeline');
+  const [currentTimeSec, setCurrentTimeSec] = useState<number>(0);
   const [showRenderModal, setShowRenderModal] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -877,12 +880,66 @@ export const ScriptStudioPage: React.FC = () => {
             </div>
           )}
 
-          <StoryboardEditor
-            manifest={manifest}
-            onChange={(m) => setManifest(m)}
-            onSelectScene={(idx) => setActiveSceneIndex(idx)}
-            activeSceneIndex={activeSceneIndex}
-          />
+          {/* DaVinci / CapCut Mode Switcher Tabs */}
+          <div className="flex items-center justify-between bg-studio-surface border border-studio-border p-1.5 rounded-xl shadow">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setEditorMode('timeline')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  editorMode === 'timeline'
+                    ? 'bg-studio-primary text-white shadow'
+                    : 'text-gray-400 hover:text-white hover:bg-studio-card'
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Timeline DaVinci / CapCut</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEditorMode('cards')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  editorMode === 'cards'
+                    ? 'bg-studio-primary text-white shadow'
+                    : 'text-gray-400 hover:text-white hover:bg-studio-card'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Danh Sách Thẻ (Cards)</span>
+              </button>
+            </div>
+
+            <span className="text-[10px] text-gray-400 font-mono pr-2">
+              Thời lượng: {Math.round(manifest.total_duration_sec)}s
+            </span>
+          </div>
+
+          {editorMode === 'timeline' ? (
+            <TimelineEditor
+              manifest={manifest}
+              onChange={(m) => setManifest(m)}
+              activeSceneIndex={activeSceneIndex}
+              onSelectScene={(idx) => {
+                setActiveSceneIndex(idx);
+                const startSec = manifest.scenes.slice(0, idx).reduce((a, s) => a + s.duration_seconds, 0);
+                setCurrentTimeSec(startSec);
+              }}
+              currentTimeSec={currentTimeSec}
+              onSeekTime={(t) => setCurrentTimeSec(t)}
+            />
+          ) : (
+            <StoryboardEditor
+              manifest={manifest}
+              onChange={(m) => setManifest(m)}
+              onSelectScene={(idx) => {
+                setActiveSceneIndex(idx);
+                const startSec = manifest.scenes.slice(0, idx).reduce((a, s) => a + s.duration_seconds, 0);
+                setCurrentTimeSec(startSec);
+              }}
+              activeSceneIndex={activeSceneIndex}
+            />
+          )}
         </section>
 
         {/* Right Column (3 cols): Real-Time Canvas Player */}
@@ -896,11 +953,8 @@ export const ScriptStudioPage: React.FC = () => {
             <div className={`w-full ${manifest.video_format === 'long-form' ? 'aspect-[16/9] max-w-[340px]' : 'aspect-[9/16] max-w-[260px]'} rounded-xl overflow-hidden shadow-2xl border border-studio-border relative bg-black`}>
               <RemotionPlayer
                 manifest={manifest}
-                currentTimeSec={
-                  manifest.scenes
-                    .slice(0, activeSceneIndex)
-                    .reduce((a, s) => a + s.duration_seconds, 0)
-                }
+                currentTimeSec={currentTimeSec}
+                onTimeUpdate={(t) => setCurrentTimeSec(t)}
               />
             </div>
 

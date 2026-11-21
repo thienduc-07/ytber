@@ -85,16 +85,17 @@ class RenderWorker:
         self.worker_id = f"worker_{hostname}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
         self.jobs: Dict[str, RenderJobStatus] = {}
         self.running_pids: Dict[str, int] = {}
+        self.active_tasks: Dict[str, asyncio.Task] = {}
         self.base_render_dir = os.path.abspath(getattr(settings, "RENDER_STORAGE_PATH", "./data/renders"))
         os.makedirs(self.base_render_dir, exist_ok=True)
         self.adapter = HyperFramesAdapter(base_render_dir=self.base_render_dir)
 
         # Worker concurrency configuration
-        self.max_concurrent_jobs = 2
+        self.max_concurrent_jobs = getattr(settings, "RENDER_MAX_CONCURRENCY", 2)
         self._semaphore: Optional[asyncio.Semaphore] = None
         self.lease_duration_seconds = 120
-        self.overall_render_timeout = 480.0  # 8 minutes max per render
-        self.inactivity_timeout = 90.0      # 90 seconds max without any process output
+        self.overall_render_timeout = getattr(settings, "RENDER_OVERALL_TIMEOUT_SECONDS", 480.0)
+        self.inactivity_timeout = getattr(settings, "RENDER_INACTIVITY_TIMEOUT_SECONDS", 90.0)
 
         # Background processing loop control
         self._loop_task: Optional[asyncio.Task] = None
@@ -387,18 +388,23 @@ class RenderWorker:
                     await self.recover_stale_jobs()
                     last_recovery_time = time.time()
 
-                claimed = await self.claim_next_job()
-                if claimed:
-                    job_id, manifest = claimed
-                    # Dispatch to execution task bounded by semaphore
-                    asyncio.create_task(self._supervised_job_execution(job_id, manifest))
-                else:
-                    # Wait for new job notification or timeout
-                    try:
-                        await asyncio.wait_for(self.new_job_event.wait(), timeout=2.0)
-                        self.new_job_event.clear()
-                    except asyncio.TimeoutError:
-                        pass
+                # Capacity Check: Only claim from DB when worker has an immediate execution slot
+                if len(self.active_tasks) < self.max_concurrent_jobs:
+                    claimed = await self.claim_next_job()
+                    if claimed:
+                        job_id, manifest = claimed
+                        # Dispatch to execution task bounded by active capacity
+                        exec_task = asyncio.create_task(self._supervised_job_execution(job_id, manifest))
+                        self.active_tasks[job_id] = exec_task
+                        exec_task.add_done_callback(lambda t, jid=job_id: self.active_tasks.pop(jid, None))
+                        continue
+
+                # Wait for new job notification or timeout
+                try:
+                    await asyncio.wait_for(self.new_job_event.wait(), timeout=2.0)
+                    self.new_job_event.clear()
+                except asyncio.TimeoutError:
+                    pass
             except asyncio.CancelledError:
                 logger.info("RenderWorker queue loop received cancellation.")
                 break
@@ -432,6 +438,7 @@ class RenderWorker:
                 if heartbeat_task and not heartbeat_task.done():
                     heartbeat_task.cancel()
                 self.running_pids.pop(job_id, None)
+                self.active_tasks.pop(job_id, None)
 
     async def _heartbeat_runner(self, job_id: str):
         """Periodically refreshes lease in DB and checks for cancellation requests."""
@@ -530,8 +537,14 @@ class RenderWorker:
             "--fps", "30",
             "--format", "mp4"
         ]
+        if getattr(settings, "RENDER_LOW_MEMORY_MODE", True):
+            render_cmd.append("--low-memory-mode")
 
         logger.info(f"[{job_id}] Spawning HyperFrames: {' '.join(render_cmd)} in {job_dir}")
+
+        logs_dir = os.path.join(job_dir, "logs")
+        os.makedirs(logs_dir, exist_ok=True)
+        log_path = os.path.join(logs_dir, "hyperframes.log")
 
         # Use process group (preexec_fn=os.setsid) on POSIX to supervise all child processes
         preexec = os.setsid if hasattr(os, "setsid") else None
@@ -547,11 +560,31 @@ class RenderWorker:
         self.running_pids[job_id] = proc.pid
 
         # Supervised asynchronous reading with dual timeout
-        await self._supervise_subprocess_output(job_id, proc)
+        await self._supervise_subprocess_output(job_id, proc, log_path=log_path)
 
         # Ensure returncode is 0
         if proc.returncode != 0:
-            raise RuntimeError(f"Tiến trình HyperFrames kết thúc với mã lỗi ({proc.returncode})")
+            code_desc = f"Mã lỗi ({proc.returncode})"
+            if proc.returncode == -6:
+                code_desc = "SIGABRT (-6, Bộ nhớ Chromium/V8 bị tràn hoặc tiến trình bị hủy đột ngột - đã kích hoạt chế độ tiết kiệm RAM)"
+            elif proc.returncode == -9:
+                code_desc = "SIGKILL (-9, Hệ thống hoặc người dùng đã dừng tiến trình khẩn cấp)"
+            elif proc.returncode == -15:
+                code_desc = "SIGTERM (-15, Lệnh dừng tiến trình từ người dùng)"
+
+            tail_lines = ""
+            if os.path.exists(log_path):
+                try:
+                    with open(log_path, "r", encoding="utf-8", errors="ignore") as lf:
+                        lines = lf.readlines()
+                        tail_lines = "\n".join([l.strip() for l in lines[-12:] if l.strip()])
+                except Exception:
+                    pass
+
+            err_detail = f"Tiến trình HyperFrames kết thúc với {code_desc}."
+            if tail_lines:
+                err_detail += f"\nChi tiết log:\n{tail_lines}"
+            raise RuntimeError(err_detail)
 
         # Locate output file
         actual_mp4 = temp_output_path
@@ -574,7 +607,8 @@ class RenderWorker:
             actual_mp4,
             expected_width=expected_w,
             expected_height=expected_h,
-            is_long=is_long
+            is_long=is_long,
+            check_audio_volume=True
         )
 
         # Atomic promotion to final output file
@@ -599,7 +633,12 @@ class RenderWorker:
         )
         logger.info(f"[{job_id}] Render completed successfully! Duration: {duration}s, Size: {file_size} bytes")
 
-    async def _supervise_subprocess_output(self, job_id: str, proc: asyncio.subprocess.Process):
+    async def _supervise_subprocess_output(
+        self,
+        job_id: str,
+        proc: asyncio.subprocess.Process,
+        log_path: Optional[str] = None
+    ):
         """
         Reads subprocess stdout/stderr in non-blocking chunks, handles carriage returns (\\r),
         scales progress percentage truthfully, and enforces overall and inactivity deadlines.
@@ -608,41 +647,53 @@ class RenderWorker:
         last_activity_time = time.time()
         buffer = ""
 
-        while True:
-            # Check overall render deadline
-            if time.time() - start_time > self.overall_render_timeout:
-                self._kill_process_group_sync(job_id)
-                raise RuntimeError(f"Tiến trình kết xuất vượt quá giới hạn thời gian tối đa ({int(self.overall_render_timeout)}s)")
-
-            # Check if cancellation was requested in DB
-            job_in_mem = self.jobs.get(job_id)
-            if job_in_mem and job_in_mem.status == "cancelling":
-                self._kill_process_group_sync(job_id)
-                raise asyncio.CancelledError()
-
-            # Read chunk with inactivity timeout
+        # Open log file if requested
+        log_f = None
+        if log_path:
             try:
-                chunk = await asyncio.wait_for(
-                    proc.stdout.read(1024),
-                    timeout=min(2.0, self.inactivity_timeout)
-                )
-            except asyncio.TimeoutError:
-                if time.time() - last_activity_time > self.inactivity_timeout:
+                log_f = open(log_path, "a", encoding="utf-8")
+            except Exception:
+                pass
+
+        try:
+            while True:
+                # Check overall render deadline
+                if time.time() - start_time > self.overall_render_timeout:
                     self._kill_process_group_sync(job_id)
-                    raise RuntimeError(f"Tiến trình kết xuất bị treo (không có phản hồi trong {int(self.inactivity_timeout)}s)")
-                continue
+                    raise RuntimeError(f"Tiến trình kết xuất vượt quá giới hạn thời gian tối đa ({int(self.overall_render_timeout)}s)")
 
-            if not chunk:
-                # EOF reached
-                break
+                # Check if cancellation was requested in DB
+                job_in_mem = self.jobs.get(job_id)
+                if job_in_mem and job_in_mem.status == "cancelling":
+                    self._kill_process_group_sync(job_id)
+                    raise asyncio.CancelledError()
 
-            last_activity_time = time.time()
-            text_chunk = chunk.decode("utf-8", errors="ignore")
-            buffer += text_chunk
+                # Read chunk with inactivity timeout
+                try:
+                    chunk = await asyncio.wait_for(
+                        proc.stdout.read(1024),
+                        timeout=min(2.0, self.inactivity_timeout)
+                    )
+                except asyncio.TimeoutError:
+                    if time.time() - last_activity_time > self.inactivity_timeout:
+                        self._kill_process_group_sync(job_id)
+                        raise RuntimeError(f"Tiến trình kết xuất bị treo (không có phản hồi trong {int(self.inactivity_timeout)}s)")
+                    continue
 
-            # Split on both \r and \n to handle dynamic terminal progress bars correctly
-            tokens = re.split(r"[\r\n]+", buffer)
-            buffer = tokens.pop()  # Keep incomplete trailing fragment
+                if not chunk:
+                    # EOF reached
+                    break
+
+                last_activity_time = time.time()
+                text_chunk = chunk.decode("utf-8", errors="ignore")
+                if log_f:
+                    log_f.write(text_chunk)
+                    log_f.flush()
+                buffer += text_chunk
+
+                # Split on both \r and \n to handle dynamic terminal progress bars correctly
+                tokens = re.split(r"[\r\n]+", buffer)
+                buffer = tokens.pop()  # Keep incomplete trailing fragment
 
             for token in tokens:
                 token_clean = token.strip()
@@ -676,6 +727,13 @@ class RenderWorker:
                         stage_text=stage_desc
                     )
 
+        finally:
+            if log_f:
+                try:
+                    log_f.close()
+                except Exception:
+                    pass
+
         await proc.wait()
 
     def _kill_process_group_sync(self, job_id: str):
@@ -701,7 +759,8 @@ class RenderWorker:
         expected_width: int,
         expected_height: int,
         is_long: bool = False,
-        min_size_bytes: int = 1000
+        min_size_bytes: int = 1000,
+        check_audio_volume: bool = False
     ) -> Dict[str, Any]:
         """
         Validates final MP4 with FFprobe and FFmpeg full decode:
@@ -771,6 +830,28 @@ class RenderWorker:
         if decode_proc.returncode != 0:
             err_str = decode_err.decode("utf-8", errors="ignore").strip()
             raise ValueError(f"Kiểm chứng giải mã video thất bại: {err_str}")
+
+        # 3. Audio Volumedetect (Guarantees genuine narration audio, not silent file)
+        if check_audio_volume:
+            vol_cmd = ["ffmpeg", "-i", filepath, "-af", "volumedetect", "-f", "null", "-"]
+            try:
+                vol_proc = await asyncio.create_subprocess_exec(
+                    *vol_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                _, vol_err = await asyncio.wait_for(vol_proc.communicate(), timeout=20.0)
+                vol_out = vol_err.decode("utf-8", errors="ignore")
+                m_mean = re.search(r"mean_volume:\s*([-\d.]+)\s*dB", vol_out)
+                if m_mean:
+                    mean_vol = float(m_mean.group(1))
+                    if mean_vol < -55.0:
+                        raise ValueError(f"Luồng âm thanh video bị câm hoặc gần như không có tín hiệu (Mean volume: {mean_vol} dB < -55.0 dB)")
+            except asyncio.TimeoutError:
+                pass
+            except Exception as vol_e:
+                if "bị câm" in str(vol_e):
+                    raise
 
         return {
             "duration": duration,
@@ -856,7 +937,11 @@ class RenderWorker:
             logger.warning(f"[{job_id}] Database update error for status={status}: {e}")
 
     async def _mark_job_failed(self, job_id: str, error_message: str):
-        """Marks job failed with actionable error message."""
+        """Marks job failed with actionable error message unless already cancelled."""
+        job = self.jobs.get(job_id)
+        if job and job.status in ("cancelled", "cancelling"):
+            logger.info(f"[{job_id}] Not marking failed because job status is {job.status}")
+            return
         clean_err = error_message.strip()
         await self._update_job_state(
             job_id,
@@ -909,6 +994,11 @@ class RenderWorker:
         if job_id in self.jobs:
             self.jobs[job_id].status = "cancelling"
 
+        # Cancel running task if any
+        active_task = self.active_tasks.get(job_id)
+        if active_task and not active_task.done():
+            active_task.cancel()
+
         # Kill subprocess group
         self._kill_process_group_sync(job_id)
 
@@ -949,14 +1039,10 @@ class RenderWorker:
                     )
                     self.jobs[job_id] = job_status
 
-                    # Tenant isolation check
-                    if user_id is not None:
-                        if (
-                            row.user_id != user_id
-                            and row.user_id not in ("demo-studio-user", "recovered-user")
-                        ):
-                            logger.warning(f"Unauthorized access: user {user_id} tried to access job {job_id}")
-                            return None
+                    # Strict tenant isolation check
+                    if user_id is not None and row.user_id != user_id:
+                        logger.warning(f"Unauthorized access: user {user_id} tried to access job {job_id}")
+                        return None
 
                     return job_status
         except Exception as e:
@@ -964,17 +1050,15 @@ class RenderWorker:
 
         # Fallback to in-memory cache
         job = self.jobs.get(job_id)
-        if job and user_id is not None:
-            if job.user_id != user_id and job.user_id not in ("demo-studio-user", "recovered-user"):
-                return None
+        if job and user_id is not None and job.user_id != user_id:
+            return None
         return job
 
     def get_job(self, job_id: str, user_id: Optional[str] = None) -> Optional[RenderJobStatus]:
         """Synchronous wrapper for memory lookup."""
         job = self.jobs.get(job_id)
-        if job and user_id is not None:
-            if job.user_id != user_id and job.user_id not in ("demo-studio-user", "recovered-user"):
-                return None
+        if job and user_id is not None and job.user_id != user_id:
+            return None
         return job
 
     async def get_diagnostics(self) -> Dict[str, Any]:

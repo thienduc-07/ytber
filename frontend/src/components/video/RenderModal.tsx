@@ -31,13 +31,18 @@ export const RenderModal: React.FC<RenderModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
 
-  const pollIntervalRef = useRef<any>(null);
+  const pollTimeoutRef = useRef<any>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const consecutiveErrorsRef = useRef<number>(0);
 
   const cleanupPolling = () => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+      pollTimeoutRef.current = null;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
   };
 
@@ -53,9 +58,13 @@ export const RenderModal: React.FC<RenderModalProps> = ({
       // localStorage may fail in private mode
     }
 
-    pollIntervalRef.current = setInterval(async () => {
+    const pollStep = async () => {
+      // Setup abort controller for this specific poll request
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       try {
-        const status = await apiClient.getRenderStatus(targetJobId);
+        const status = await apiClient.getRenderStatus(targetJobId, controller.signal);
         consecutiveErrorsRef.current = 0;
 
         setJobStatus(status.status);
@@ -76,6 +85,7 @@ export const RenderModal: React.FC<RenderModalProps> = ({
             duration: status.duration_seconds,
             size: status.file_size_bytes,
           });
+          return;
         } else if (status.status === 'failed') {
           cleanupPolling();
           try {
@@ -84,6 +94,7 @@ export const RenderModal: React.FC<RenderModalProps> = ({
           setIsRendering(false);
           setIsCancelling(false);
           setError(status.error_message || 'Quá trình kết xuất video thất bại');
+          return;
         } else if (status.status === 'cancelled') {
           cleanupPolling();
           try {
@@ -92,18 +103,45 @@ export const RenderModal: React.FC<RenderModalProps> = ({
           setIsRendering(false);
           setIsCancelling(false);
           setCurrentStage('Tiến trình kết xuất đã được hủy an toàn.');
+          return;
         }
+
+        // Schedule next poll iteration recursively
+        pollTimeoutRef.current = setTimeout(pollStep, 1200);
       } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          return; // Intentionally aborted, do not handle as error
+        }
+
+        // Handle 404 cleanly by clearing stale job from storage
+        if (err?.status === 404 || err?.message?.includes('404') || err?.message?.includes('not found')) {
+          cleanupPolling();
+          try {
+            localStorage.removeItem(STORAGE_ACTIVE_JOB_KEY);
+          } catch {}
+          setIsRendering(false);
+          setJobId(null);
+          setError('Tiến trình render trước đó không còn tồn tại hoặc đã hết hạn.');
+          return;
+        }
+
         consecutiveErrorsRef.current += 1;
         console.warn(`Error polling render status (${consecutiveErrorsRef.current}/5):`, err);
+
         if (consecutiveErrorsRef.current >= 5) {
           cleanupPolling();
           setIsRendering(false);
           setIsCancelling(false);
           setError('Mất kết nối với máy chủ quản lý render sau nhiều lần thử lại. Vui lòng kiểm tra mạng hoặc trạng thái máy chủ.');
+        } else {
+          // Retry with backoff
+          pollTimeoutRef.current = setTimeout(pollStep, 2000);
         }
       }
-    }, 1200);
+    };
+
+    // Trigger immediate first poll step
+    pollStep();
   };
 
   useEffect(() => {

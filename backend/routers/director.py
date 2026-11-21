@@ -2,6 +2,7 @@ import os
 import re
 import uuid
 import asyncio
+import logging
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
@@ -18,6 +19,8 @@ from backend.providers.asset_discovery import AssetDiscoveryService
 from backend.providers.asset_downloader import AssetDownloaderService
 from backend.providers.soundscape_engine import AISoundscapeDirector
 from backend.providers.render_worker import RenderWorker
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/director", tags=["AI Director & Zero-Touch Video Production"])
 
@@ -82,6 +85,7 @@ async def generate_movie_zero_touch(
     6. Tính toán toàn bộ mốc khung hình (start_frame, end_frame, 30 FPS) và trả về SceneManifest hoàn chỉnh.
     """
     try:
+        stage = "director_blueprint"
         # 1. Generate Film Blueprint
         blueprint = director_engine.generate_film_blueprint(
             script_text=req.script_text,
@@ -94,7 +98,7 @@ async def generate_movie_zero_touch(
         if not blueprint_scenes:
             raise ValueError("Không tạo được danh sách cảnh từ kịch bản")
 
-        auth_token = authorization.split(" ")[1] if authorization and " " in authorization else "demo-guest-token"
+        auth_token = authorization.split(" ")[1] if (isinstance(authorization, str) and " " in authorization) else "demo-guest-token"
         fps = 30
         is_long = req.video_format == "long-form"
         width = 1920 if is_long else 1080
@@ -103,6 +107,13 @@ async def generate_movie_zero_touch(
         processed_scenes = []
         current_frame = 0
 
+        session_to_use = db
+        close_session = False
+        if not hasattr(db, "execute"):
+            from backend.core.database import AsyncSessionLocal
+            session_to_use = AsyncSessionLocal()
+            close_session = True
+
         # 2. Process each scene: TTS, Asset Discovery, and 4-Bus Soundscape
         for idx, bp_sc in enumerate(blueprint_scenes):
             narration = bp_sc.get("narration_text", "").strip()
@@ -110,6 +121,7 @@ async def generate_movie_zero_touch(
             sc_id = bp_sc.get("scene_id", f"scene_{sc_order:02d}")
 
             # 2a. Voice Synthesis with Real Duration Measurement
+            stage = f"tts_synthesis_scene_{sc_order}"
             tts_res = await voice_provider.synthesize(
                 text=narration,
                 voice=req.voice,
@@ -117,15 +129,17 @@ async def generate_movie_zero_touch(
                 pitch=req.pitch
             )
             real_duration = max(3.0, round(tts_res.duration_seconds, 2))
-            audio_filename = f"{tts_res.audio_id}.mp3"
-            audio_url = f"/api/v1/tts/audio/{audio_filename}?token={auth_token}"
+            audio_filename = getattr(tts_res, "filename", None) or f"{tts_res.audio_id}.mp3"
+            audio_file_path = getattr(tts_res, "file_path", None) or os.path.abspath(os.path.join(voice_provider.storage_dir, audio_filename))
+            audio_url = f"/api/v1/tts/audio/{audio_filename}"
 
             # Register audio file in database for authenticated user
+            stage = f"audio_registration_scene_{sc_order}"
             stmt = select(AudioFileModel).where(
                 AudioFileModel.filename == audio_filename,
                 AudioFileModel.user_id == user_id
             )
-            existing_audio = (await db.execute(stmt)).scalar_one_or_none()
+            existing_audio = (await session_to_use.execute(stmt)).scalar_one_or_none()
             if not existing_audio:
                 db_audio = AudioFileModel(
                     id=str(uuid.uuid4()),
@@ -133,10 +147,11 @@ async def generate_movie_zero_touch(
                     filename=audio_filename,
                     duration_seconds=real_duration
                 )
-                db.add(db_audio)
-                await db.commit()
+                session_to_use.add(db_audio)
+                await session_to_use.commit()
 
             # 2b. Asset Discovery & Provenance Recording
+            stage = f"asset_discovery_scene_{sc_order}"
             scene_assets = []
             visual_config: Dict[str, Any] = {}
             visual_method = bp_sc.get("visual_method", "toon")
@@ -179,6 +194,7 @@ async def generate_movie_zero_touch(
                 visual_config["procedural"] = True
 
             # 2c. 4-Bus Soundscape Enrichment (Voiceover, BGM ducked, Ambience, SFX)
+            stage = f"soundscape_scene_{sc_order}"
             soundscape_spec = AISoundscapeDirector.generate_soundscape_for_scene(
                 scene_id=sc_id,
                 scene_order=sc_order,
@@ -201,6 +217,19 @@ async def generate_movie_zero_touch(
                 }
                 for evt in soundscape_spec.action_sfx_events
             ]
+            existing_sfx_ids = {evt.event_id for evt in soundscape_spec.action_sfx_events}
+            for cue in bp_sc.get("sfx_cues", []):
+                cue_id = cue.get("sfx_id") or f"cue_{cue.get('sfx_type', 'action')}"
+                if cue_id not in existing_sfx_ids:
+                    existing_sfx_ids.add(cue_id)
+                    combined_sfx.append({
+                        "sfx_id": cue_id,
+                        "sfx_type": cue.get("sfx_type", "action"),
+                        "description": cue.get("description", "Hiệu ứng âm thanh từ kịch bản"),
+                        "start_time_offset_ms": cue.get("start_time_offset_ms", 300),
+                        "volume": cue.get("volume", 0.5),
+                        "duck_narration": False
+                    })
 
             # 2d. Frame bounds calculation
             frame_count = int(round(real_duration * fps))
@@ -225,7 +254,12 @@ async def generate_movie_zero_touch(
                 "transition": bp_sc.get("transition", "crossfade"),
                 "audio_id": tts_res.audio_id,
                 "audio_filename": audio_filename,
+                "audio_file_path": audio_file_path,
                 "audio_url": audio_url,
+                "audio_provider": getattr(tts_res, "provider", "edge-tts"),
+                "audio_duration_seconds": real_duration,
+                "audio_sample_rate": getattr(tts_res, "sample_rate", 24000),
+                "audio_format": getattr(tts_res, "format", "mp3"),
                 "subtitles_json": [w.model_dump() if hasattr(w, "model_dump") else w for w in tts_res.words],
                 "assets": scene_assets,
                 "music_direction": soundscape_spec.music_theme,
@@ -236,6 +270,8 @@ async def generate_movie_zero_touch(
             })
 
         total_duration = sum(s["duration_seconds"] for s in processed_scenes)
+
+        stage = "manifest_composition"
 
         manifest = {
             "episode_id": f"movie_{uuid.uuid4().hex[:12]}",
@@ -270,11 +306,24 @@ async def generate_movie_zero_touch(
 
         return manifest
 
+    except HTTPException:
+        raise
     except Exception as e:
+        corr_id = uuid.uuid4().hex[:8]
+        logger.error(f"[{corr_id}] Production pipeline failed at stage '{stage}': {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Lỗi trong quy trình tạo phim tự động: {str(e)}"
+            detail={
+                "error_code": "PRODUCE_MOVIE_STAGE_FAILED",
+                "stage": stage,
+                "message": f"Lỗi trong quy trình sản xuất phim tại công đoạn [{stage}]: {str(e)}",
+                "retryable": stage.startswith("tts_") or stage.startswith("asset_"),
+                "correlation_id": corr_id
+            }
         )
+    finally:
+        if close_session and session_to_use:
+            await session_to_use.close()
 
 
 @router.post("/one-click-produce")
@@ -288,20 +337,28 @@ async def one_click_produce_movie(
     Quy trình sản xuất phim 1 chạm duy nhất (True One-Click Zero-Touch):
     1 thao tác từ người dùng -> AI Director -> TTS -> 4-Bus Audio -> HyperFrames -> Bắt đầu kết xuất ngay lập tức -> Trả về job_id để frontend theo dõi tiến độ.
     """
-    manifest = await generate_movie_zero_touch(
-        req=req,
-        authorization=authorization,
-        user_id=user_id,
-        db=db
-    )
-
-    job = await render_worker.create_job_async(manifest, user_id=user_id)
-    return {
-        "job_id": job.job_id,
-        "status": job.status,
-        "stage_text": job.stage_text,
-        "progress_percent": job.progress_percent,
-        "resolution": job.resolution,
-        "video_format": job.video_format,
-        "manifest": manifest
-    }
+    try:
+        manifest = await generate_movie_zero_touch(
+            req=req,
+            authorization=authorization,
+            user_id=user_id,
+            db=db
+        )
+        job = await render_worker.create_job_async(manifest, user_id=user_id)
+        return {
+            "job_id": job.job_id,
+            "status": job.status,
+            "stage_text": job.stage_text,
+            "progress_percent": job.progress_percent,
+            "resolution": job.resolution,
+            "video_format": job.video_format,
+            "manifest": manifest
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"One-click produce failed for user {user_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi sản xuất phim tự động: {str(e)}"
+        )

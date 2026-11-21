@@ -22,6 +22,9 @@ class ResearchFact(BaseModel):
     source_name: str = Field(..., description="Reputable source or institution name")
     source_url: str = Field(..., description="Source domain or documentation URL")
     fact_type: str = Field(default="verified_fact", description="verified_fact, statistic, historic_record, scientific_consensus")
+    publication_date: Optional[str] = Field(default=None, description="Publication date or historical record date")
+    verification_status: str = Field(default="verified", description="verified, disputed, uncertain")
+    supporting_evidence: Optional[str] = Field(default=None, description="Direct supporting citation excerpt or context")
 
 
 class ResearchEntity(BaseModel):
@@ -103,19 +106,28 @@ class AIResearchEngine:
                     statement="Chiến dịch Điện Biên Phủ diễn ra trong 56 ngày đêm (13/3/1954 - 7/5/1954) chia làm 3 đợt tấn công quyết định.",
                     source_name="Bảo tàng Lịch sử Quân sự Việt Nam",
                     source_url="https://btlsqsvn.org.vn",
-                    fact_type="historic_record"
+                    fact_type="historic_record",
+                    publication_date="1954-05-07",
+                    verification_status="verified",
+                    supporting_evidence="Hồ sơ lưu trữ Bộ Quốc phòng về diễn biến 56 ngày đêm của 3 đợt tiến công đập tan tập đoàn cứ điểm."
                 ),
                 ResearchFact(
                     statement="Quân và dân Việt Nam đã vận chuyển bằng sức người hàng chục khẩu trọng pháo 105mm vượt qua đèo cao dốc thẳm Mường Thanh.",
                     source_name="Tạp chí Lịch sử Quân sự",
                     source_url="https://tapchilichsuquansu.vn",
-                    fact_type="verified_fact"
+                    fact_type="verified_fact",
+                    publication_date="1954-03-01",
+                    verification_status="verified",
+                    supporting_evidence="Ký ức kéo pháo và tài liệu tác chiến Trung đoàn Pháo binh 675 và 45."
                 ),
                 ResearchFact(
                     statement="Vào 17h30 ngày 7/5/1954, lá cờ Quyết chiến Quyết thắng tung bay trên nóc hầm tướng De Castries.",
                     source_name="Thông tấn xã Việt Nam",
                     source_url="https://vnanet.vn",
-                    fact_type="historic_record"
+                    fact_type="historic_record",
+                    publication_date="1954-05-07",
+                    verification_status="verified",
+                    supporting_evidence="Bản tin đặc biệt ngày 7/5/1954 của Việt Nam Thông tấn xã ghi nhận toàn bộ Bộ chỉ huy tập đoàn cứ điểm đầu hàng."
                 )
             ]
             entities = [

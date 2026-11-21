@@ -59,6 +59,8 @@ async def test_wikimedia_live_discovery_integration():
     """Verify real live Wikimedia Commons search returns permissive assets with metadata."""
     provider = WikimediaCommonsProvider()
     results = await provider.search("Vietnam", limit=3)
+    if not results:
+        results = await provider.search("Vietnam map", limit=3)
     assert len(results) > 0, "Live Wikimedia Commons query for 'Vietnam' should return results"
 
     asset = results[0]

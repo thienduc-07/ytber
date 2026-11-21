@@ -17,13 +17,15 @@ from backend.providers.tts_engine import UnifiedTTSProvider
 from backend.providers.asset_discovery import AssetDiscoveryService
 from backend.providers.asset_downloader import AssetDownloaderService
 from backend.providers.soundscape_engine import AISoundscapeDirector
+from backend.providers.render_worker import RenderWorker
 
 router = APIRouter(prefix="/api/v1/director", tags=["AI Director & Zero-Touch Video Production"])
 
 director_engine = AIDirectorEngine()
-voice_provider = UnifiedTTSProvider(allow_offline_fallback=True)
+voice_provider = UnifiedTTSProvider(allow_offline_fallback=False)
 asset_discovery = AssetDiscoveryService()
 asset_downloader = AssetDownloaderService()
+render_worker = RenderWorker()
 
 class FilmBlueprintRequest(BaseModel):
     script_text: str = Field(..., min_length=10, description="Văn bản kịch bản tiếng Việt")
@@ -221,13 +223,16 @@ async def generate_movie_zero_touch(
                 "camera_direction": bp_sc.get("camera_direction", "slow_push_in"),
                 "camera_movement": bp_sc.get("camera_direction", "slow_push_in"),
                 "transition": bp_sc.get("transition", "crossfade"),
+                "audio_id": tts_res.audio_id,
+                "audio_filename": audio_filename,
                 "audio_url": audio_url,
                 "subtitles_json": [w.model_dump() if hasattr(w, "model_dump") else w for w in tts_res.words],
                 "assets": scene_assets,
                 "music_direction": soundscape_spec.music_theme,
                 "ambient_layers": [l.model_dump() if hasattr(l, "model_dump") else l for l in soundscape_spec.ambient_layers],
                 "sound_design": combined_sfx,
-                "sound_effects": combined_sfx
+                "sound_effects": combined_sfx,
+                "sfx_cues": combined_sfx
             })
 
         total_duration = sum(s["duration_seconds"] for s in processed_scenes)
@@ -270,3 +275,33 @@ async def generate_movie_zero_touch(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi trong quy trình tạo phim tự động: {str(e)}"
         )
+
+
+@router.post("/one-click-produce")
+async def one_click_produce_movie(
+    req: GenerateMovieRequest,
+    authorization: Optional[str] = Header(None),
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Quy trình sản xuất phim 1 chạm duy nhất (True One-Click Zero-Touch):
+    1 thao tác từ người dùng -> AI Director -> TTS -> 4-Bus Audio -> HyperFrames -> Bắt đầu kết xuất ngay lập tức -> Trả về job_id để frontend theo dõi tiến độ.
+    """
+    manifest = await generate_movie_zero_touch(
+        req=req,
+        authorization=authorization,
+        user_id=user_id,
+        db=db
+    )
+
+    job = render_worker.create_job(manifest, user_id=user_id)
+    return {
+        "job_id": job.job_id,
+        "status": job.status,
+        "stage_text": job.stage_text,
+        "progress_percent": job.progress_percent,
+        "resolution": job.resolution,
+        "video_format": job.video_format,
+        "manifest": manifest
+    }

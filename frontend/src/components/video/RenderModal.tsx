@@ -8,9 +8,10 @@ interface RenderModalProps {
   isOpen: boolean;
   onClose: () => void;
   autoStart?: boolean;
+  initialJobId?: string | null;
 }
 
-export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onClose, autoStart = false }) => {
+export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onClose, autoStart = false, initialJobId = null }) => {
   const [isRendering, setIsRendering] = useState(false);
   const [currentStage, setCurrentStage] = useState<string>('Sẵn sàng kết xuất video');
   const [progressPercent, setProgressPercent] = useState<number>(0);
@@ -22,9 +23,45 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
 
   const pollIntervalRef = useRef<any>(null);
 
+  const startPolling = (targetJobId: string) => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    setIsRendering(true);
+    setJobId(targetJobId);
+
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const status = await apiClient.getRenderStatus(targetJobId);
+        setProgressPercent(status.progress_percent || 0);
+        setCurrentStage(status.stage_text || 'Đang xử lý...');
+
+        if (status.status === 'completed') {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+          setIsRendering(false);
+          const downloadUri = await apiClient.getRenderDownloadUrl(targetJobId);
+          setDownloadUrl(downloadUri);
+          setVideoUrl(downloadUri);
+          setVideoMetadata({
+            duration: status.duration_seconds,
+            size: status.file_size_bytes,
+          });
+        } else if (status.status === 'failed') {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+          setIsRendering(false);
+          setError(status.error_message || 'Quá trình kết xuất video thất bại');
+        }
+      } catch (err: any) {
+        console.warn('Error polling render status:', err);
+      }
+    }, 1000);
+  };
+
   useEffect(() => {
     if (isOpen) {
-      if (autoStart && !isRendering && !videoUrl) {
+      if (initialJobId) {
+        startPolling(initialJobId);
+      } else if (autoStart && !isRendering && !videoUrl) {
         handleStartHyperFramesRender();
       }
     } else {
@@ -36,7 +73,7 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
       setProgressPercent(0);
       setError(null);
     }
-  }, [isOpen, autoStart]);
+  }, [isOpen, autoStart, initialJobId]);
 
   const handleStartHyperFramesRender = async () => {
     setError(null);
@@ -48,37 +85,7 @@ export const RenderModal: React.FC<RenderModalProps> = ({ manifest, isOpen, onCl
       const startRes = await apiClient.startRender(manifest);
       setJobId(startRes.job_id);
       setCurrentStage(startRes.stage_text || 'Đang kết xuất video...');
-
-      // Start polling for real-time progress
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-
-      pollIntervalRef.current = setInterval(async () => {
-        try {
-          const status = await apiClient.getRenderStatus(startRes.job_id);
-          setProgressPercent(status.progress_percent || 0);
-          setCurrentStage(status.stage_text || 'Đang xử lý...');
-
-          if (status.status === 'completed') {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
-            setIsRendering(false);
-            const downloadUri = apiClient.getRenderDownloadUrl(startRes.job_id);
-            setDownloadUrl(downloadUri);
-            setVideoUrl(downloadUri);
-            setVideoMetadata({
-              duration: status.duration_seconds,
-              size: status.file_size_bytes,
-            });
-          } else if (status.status === 'failed') {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
-            setIsRendering(false);
-            setError(status.error_message || 'Quá trình kết xuất video thất bại');
-          }
-        } catch (err: any) {
-          console.warn('Error polling render status:', err);
-        }
-      }, 1000);
+      startPolling(startRes.job_id);
     } catch (err: any) {
       setIsRendering(false);
       setError(err?.message || 'Không thể bắt đầu kết xuất video');

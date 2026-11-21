@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     ENVIRONMENT: str = "production"
     PORT: int = 8000
+    ALLOW_DEMO_AUTH: bool = False  # Strictly False by default in production. Only enabled for local dev/testing.
     CORS_ORIGINS: List[str] = [
         "https://studio.yourdomain.com",
         "http://localhost:5173",

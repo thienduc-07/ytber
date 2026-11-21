@@ -25,7 +25,7 @@ import json
 import shutil
 import subprocess
 from typing import Dict, Any, List, Optional
-from backend.providers.tts_engine import UnifiedTTSProvider, WordTiming
+from backend.providers.tts_engine import UnifiedTTSProvider, WordTiming, validate_audio_file
 from backend.providers.character_rig_2d import CharacterRig2D
 from backend.providers.environment_builder_2d import EnvironmentBuilder2D
 from backend.providers.soundscape_engine import AISoundscapeDirector
@@ -145,6 +145,13 @@ class HyperFramesAdapter:
         total_duration = max(5.0, manifest.get("total_duration_sec", 10.0))
         genre = manifest.get("genre", "historical_doc")
 
+        # Dynamic Aspect Ratio & Resolution Handling (Shorts 9:16 vs Long-form 16:9)
+        video_format = manifest.get("video_format") or manifest.get("video_specs", {}).get("format") or "short-form"
+        aspect_ratio = manifest.get("aspect_ratio") or manifest.get("video_specs", {}).get("aspect_ratio") or ("9:16" if video_format == "short-form" else "16:9")
+        is_long = video_format == "long-form" or aspect_ratio == "16:9"
+        width = 1920 if is_long else 1080
+        height = 1080 if is_long else 1920
+
         # Prepare BGM and SFX audio files
         bgm_type = "bgm_horror" if "horror" in genre else ("bgm_tech" if "tech" in genre else "bgm_heroic")
         bgm_path = os.path.join(job_dir, "assets", "audio", "bgm.mp3")
@@ -159,9 +166,9 @@ class HyperFramesAdapter:
         sfx_click_path = os.path.join(job_dir, "assets", "audio", "sfx_click.mp3")
         self.synthesize_acoustic_asset(sfx_click_path, "sfx_click", duration_sec=0.5)
 
-        # Audio elements markup
+        # Audio elements markup - 4 distinct production buses
         audio_elements = []
-        # Background music
+        # Bus 2: Background music bed (ducked at 0.14 volume = -17dB)
         audio_elements.append(
             f'<audio id="bgm_track" class="clip" src="assets/audio/bgm.mp3" data-start="0.0" data-duration="{round(total_duration, 2)}" data-volume="0.14" data-track-index="1"></audio>'
         )
@@ -179,45 +186,73 @@ class HyperFramesAdapter:
             narration = scene.get("narration_text", "")
             grammar = self.select_visual_grammar(scene, s_order, len(scenes), genre)
 
-            # Copy Voice Audio
-            audio_url = scene.get("audio_url")
+            # Bus 1: Copy Genuine Voiceover Audio (Never fake tones)
+            audio_url = scene.get("audio_url") or ""
+            audio_id = scene.get("audio_id") or ""
             voice_rel_path = f"assets/audio/voice_{idx}.mp3"
             voice_dest_path = os.path.join(job_dir, voice_rel_path)
 
+            clean_filename = ""
             if audio_url:
-                # Resolve local storage file path
-                clean_filename = os.path.basename(audio_url)
-                possible_paths = [
+                url_without_params = audio_url.split("?")[0]
+                clean_filename = os.path.basename(url_without_params)
+            elif audio_id:
+                clean_filename = audio_id if audio_id.endswith(".mp3") else f"{audio_id}.mp3"
+
+            possible_paths = []
+            if clean_filename:
+                possible_paths.extend([
                     os.path.join("./data/audio", clean_filename),
                     os.path.abspath(os.path.join("./data/audio", clean_filename)),
-                    audio_url if os.path.isabs(audio_url) else ""
-                ]
-                copied = False
-                for p in possible_paths:
-                    if p and os.path.exists(p) and os.path.getsize(p) > 200:
+                ])
+            if audio_url and os.path.isabs(audio_url.split("?")[0]):
+                possible_paths.append(audio_url.split("?")[0])
+
+            copied = False
+            for p in possible_paths:
+                if p and os.path.exists(p) and os.path.getsize(p) > 200:
+                    is_valid, _ = validate_audio_file(p)
+                    if is_valid:
                         shutil.copy2(p, voice_dest_path)
                         copied = True
                         break
-                if not copied:
-                    # Generate speech on the fly if needed
-                    self.synthesize_acoustic_asset(voice_dest_path, "bgm_heroic", duration_sec=duration)
-            else:
-                self.synthesize_acoustic_asset(voice_dest_path, "bgm_heroic", duration_sec=duration)
 
-            # Audio voiceover tag
+            if not copied:
+                raise RuntimeError(
+                    f"Missing or corrupted narration voiceover for scene {s_order}: '{clean_filename}'. "
+                    "Production pipeline strictly prohibits substituting fake audio or silence for voiceover."
+                )
+
+            # Bus 1: Voiceover tag
             audio_elements.append(
                 f'<audio id="voice_{idx}" class="clip" src="{voice_rel_path}" data-start="{start_time}" data-duration="{duration}" data-volume="1.0" data-track-index="2"></audio>'
             )
 
-            # SFX Cue per scene: Contextual action SFX or dynamic transition whoosh
-            sfx_list = scene.get("sfx_cues") or []
+            # Bus 3: Environmental Ambience
+            amb_list = scene.get("ambient_layers") or manifest.get("ambient_layers") or []
+            if amb_list:
+                top_amb = amb_list[0]
+                amb_id = top_amb.get("layer_id") or "amb_room_tone"
+                clean_amb_id = "".join(c for c in amb_id if c.isalnum() or c in ("_", "-"))
+                amb_file = f"assets/audio/{clean_amb_id}.mp3"
+                amb_dest = os.path.join(job_dir, amb_file)
+                if not os.path.exists(amb_dest):
+                    AISoundscapeDirector.synthesize_sfx_file(clean_amb_id, amb_dest)
+                amb_vol = top_amb.get("volume", 0.25)
+                audio_elements.append(
+                    f'<audio id="amb_{idx}" class="clip" src="{amb_file}" data-start="{start_time}" data-duration="{duration}" data-volume="{amb_vol}" data-track-index="4"></audio>'
+                )
+
+            # Bus 4: Action SFX Cue per scene
+            sfx_list = scene.get("sfx_cues") or scene.get("sound_design") or []
             if sfx_list:
                 top_sfx = sfx_list[0]
                 sfx_id = top_sfx.get("sfx_id") or "sfx_whoosh"
                 clean_sfx_id = "".join(c for c in sfx_id if c.isalnum() or c in ("_", "-"))
                 sfx_file = f"assets/audio/{clean_sfx_id}.mp3"
                 sfx_dest = os.path.join(job_dir, sfx_file)
-                AISoundscapeDirector.synthesize_sfx_file(clean_sfx_id, sfx_dest)
+                if not os.path.exists(sfx_dest):
+                    AISoundscapeDirector.synthesize_sfx_file(clean_sfx_id, sfx_dest)
                 sfx_vol = top_sfx.get("volume", 0.45)
                 sfx_offset = min(1.0, round(float(top_sfx.get("start_time_offset_ms", 0)) / 1000.0, 2))
                 sfx_time = round(start_time + sfx_offset, 2)
@@ -273,8 +308,8 @@ class HyperFramesAdapter:
         box-sizing: border-box;
       }}
       html, body {{
-        width: 1080px;
-        height: 1920px;
+        width: {width}px;
+        height: {height}px;
         overflow: hidden;
         background: var(--ground);
         font-family: var(--font-primary);
@@ -282,8 +317,8 @@ class HyperFramesAdapter:
         -webkit-font-smoothing: antialiased;
       }}
       #root {{
-        width: 1080px;
-        height: 1920px;
+        width: {width}px;
+        height: {height}px;
         position: relative;
         overflow: hidden;
         background: radial-gradient(circle at 50% 40%, #161F36 0%, #07090E 80%);
@@ -302,8 +337,8 @@ class HyperFramesAdapter:
       .scene-viewport {{
         position: absolute;
         inset: 0;
-        width: 1080px;
-        height: 1920px;
+        width: {width}px;
+        height: {height}px;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -443,9 +478,9 @@ class HyperFramesAdapter:
       data-composition-id="main"
       data-start="0"
       data-duration="{round(total_duration, 2)}"
-      data-width="1080"
-      data-height="1920"
-      data-fps="30"
+      data-width="{width}"
+      data-height="{height}"
+      data-fps="{fps}"
     >
       <div class="cinematic-vignette"></div>
 

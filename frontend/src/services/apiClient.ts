@@ -4,6 +4,17 @@ import type { Project, SceneManifest, SceneAsset, GenreInfo, VoiceInfo } from '.
 const rawBase = (import.meta.env.VITE_API_BASE_URL as string) || '';
 const API_BASE = rawBase ? (rawBase.endsWith('/api/v1') ? rawBase : `${rawBase.replace(/\/$/, '')}/api/v1`) : '/api/v1';
 
+export async function getAuthToken(): Promise<string> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (token) return token;
+    return localStorage.getItem('ytber_access_token') || localStorage.getItem('ytber_guest_token') || 'demo-guest-session-token';
+  } catch {
+    return localStorage.getItem('ytber_guest_token') || 'demo-guest-session-token';
+  }
+}
+
 export async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -38,6 +49,9 @@ export interface ResearchFact {
   source_name: string;
   source_url: string;
   fact_type: string;
+  publication_date?: string;
+  verification_status?: string;
+  supporting_evidence?: string;
 }
 
 export interface ResearchEntity {
@@ -403,6 +417,28 @@ export const apiClient = {
     return await res.json();
   },
 
+  async oneClickProduce(params: GenerateMovieParams): Promise<{
+    job_id: string;
+    status: string;
+    stage_text: string;
+    progress_percent: number;
+    resolution: string;
+    video_format: string;
+    manifest: SceneManifest;
+  }> {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/director/one-click-produce`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Sản xuất phim tự động thất bại (${res.status})`);
+    }
+    return await res.json();
+  },
+
   async getFilmBlueprint(params: { script_text: string; genre?: string; video_format?: string }): Promise<FilmBlueprint> {
     const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE}/director/blueprint`, {
@@ -506,12 +542,17 @@ export const apiClient = {
     file_size_bytes?: number;
     error_message?: string;
   }> {
-    const res = await fetch(`${API_BASE}/render/status/${jobId}`);
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/render/status/${jobId}`, { headers });
     if (!res.ok) throw new Error(`Lấy trạng thái kết xuất thất bại (${res.status})`);
     return await res.json();
   },
 
-  getRenderDownloadUrl(jobId: string): string {
+  async getRenderDownloadUrl(jobId: string): Promise<string> {
+    const token = await getAuthToken();
+    if (token) {
+      return `${API_BASE}/render/download/${jobId}?token=${encodeURIComponent(token)}`;
+    }
     return `${API_BASE}/render/download/${jobId}`;
   },
 };

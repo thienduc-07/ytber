@@ -6,7 +6,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import app
+from backend.core.config import settings
 from backend.providers.research_engine import AIResearchEngine
+from backend.tests.test_director_router import get_auth_headers, TEST_SECRET
+
+@pytest.fixture(autouse=True)
+def setup_test_env(monkeypatch):
+    monkeypatch.setattr(settings, "SUPABASE_JWT_SECRET", TEST_SECRET)
+    monkeypatch.setattr(settings, "SUPABASE_JWT_AUDIENCE", "authenticated")
+    monkeypatch.setattr(settings, "SUPABASE_JWT_ISSUER", "https://test.supabase.co/auth/v1")
 
 
 @pytest.fixture
@@ -56,8 +64,8 @@ def test_research_router_endpoints():
     assert data["category"] == "historical_doc"
     assert len(data["verified_facts"]) >= 1
 
-    # 2. Topic research with demo token
-    headers = {"Authorization": "Bearer demo-guest-token"}
+    # 2. Topic research with authenticated token
+    headers = get_auth_headers("research_test_user")
     post_resp = client.post("/api/v1/research/topic", json={
         "topic": "Trí tuệ nhân tạo tương lai",
         "category": "technology"

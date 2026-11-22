@@ -111,6 +111,15 @@ class HyperFramesAdapter:
             return "scientific_technical_schematic"
         if vis_method in ("presenter", "doctor", "narrator", "narrator_expert_explainer"):
             return "narrator_expert_explainer"
+        if vis_method in ("horror", "gothic_horror"):
+            if any(w in text for w in ["hành lang", "bước chân", "dấu chân", "chạy", "đuổi"]):
+                return "horror_dark_corridor"
+            elif any(w in text for w in ["bóng", "người đàn bà", "áo trắng", "sau lưng", "gương", "quỷ", "twist", "mẹ"]):
+                return "horror_shadow_encounter"
+            elif any(w in text for w in ["hét", "sốc", "kinh hoàng", "giật mình", "bầm tím", "chết lặng"]):
+                return "horror_shock_recoil"
+            else:
+                return "horror_bedroom_flashlight"
 
         # 2. Anatomical, Internal Organs, Biological, Health & Medical explainer
         is_anatomy = any(g in cat for g in ["medical", "biology", "health", "science_explainer"]) or any(

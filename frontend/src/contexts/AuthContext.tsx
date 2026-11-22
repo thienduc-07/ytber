@@ -133,18 +133,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const localUsers = localUsersRaw ? JSON.parse(localUsersRaw) : [];
       const found = localUsers.find((u: any) => u.email === cleanEmail);
 
-      if (found && found.password !== password) {
-        return { error: new Error('Mật khẩu không chính xác, vui lòng thử lại.') };
+      if (!found) {
+        return {
+          error: new Error('Tài khoản này chưa được đăng ký trong hệ thống Studio. Vui lòng bấm "Đăng ký tài khoản mới" ở bên dưới.')
+        };
       }
 
-      // If user exists or create studio user on the fly
-      const userId = found?.id || `user_${btoa(cleanEmail).replace(/=/g, '').slice(0, 16)}`;
-      const fullName = found?.full_name || cleanEmail.split('@')[0];
+      if (found.password !== password) {
+        return { error: new Error('Mật khẩu không chính xác, vui lòng kiểm tra lại.') };
+      }
+
+      // Valid registered user
+      const userId = found.id;
+      const fullName = found.full_name || cleanEmail.split('@')[0];
       const localUser: any = {
         id: userId,
         email: cleanEmail,
         user_metadata: { full_name: fullName },
-        created_at: found?.created_at || new Date().toISOString(),
+        created_at: found.created_at || new Date().toISOString(),
       };
 
       const token = `guest-studio-token-${userId}`;

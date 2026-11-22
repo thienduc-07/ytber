@@ -25,76 +25,158 @@ const buildDefaultManifestForProject = (
   const g = (genre || '').toLowerCase();
   const t = (title || '').toLowerCase();
 
-  if (g.includes('horror') || t.includes('ma') || t.includes('kinh dị')) {
-    const script = `Bạn có dám bước chân vào căn nhà gỗ cổ kính ở cuối làng khi màn đêm buông xuống? Cứ đúng mười hai giờ đêm, ngọn đèn dầu trên bàn thờ lại tự bốc cháy lập lòe trong sương mù. Những tiếng bước chân kẽo kẹt vang lên từng hồi trên sàn gỗ mục nát, dẫn lối người tò mò vào một bí mật bị chôn giấu suốt nửa thế kỷ. Đừng bao giờ ngoảnh đầu lại nếu nghe thấy tiếng thì thầm gọi tên mình từ phía sau bóng tối!`;
+  if (g.includes('horror') || t.includes('ma') || t.includes('kinh dị') || t.includes('căn nhà')) {
+    const script = `🎬 CĂN NHÀ GỖ CUỐI LÀNG
+
+Thể loại: Kinh dị tâm linh – Bí ẩn – Psychological Horror
+Thời lượng dự kiến: 3–4 phút
+Phong cách hình ảnh: Cinematic 3D Animation, Gothic Horror, Dark Fantasy, Vietnamese Folklore.
+Bối cảnh: Một ngôi làng Việt Nam cổ kính vào những năm 1970, sương mù dày đặc, ánh trăng lạnh, những căn nhà gỗ cũ kỹ.
+
+⸻
+
+KỊCH BẢN CHI TIẾT – 16 PHÂN CẢNH
+
+PHÂN CẢNH 1 – LỜI CẢNH BÁO
+Hình ảnh: Góc máy flycam lướt qua một ngôi làng hẻo lánh giữa màn đêm. Những mái nhà phủ rêu, con đường đất quanh co, ánh trăng mờ ảo. Cuối con đường là một căn nhà gỗ lớn, đứng cô độc giữa màn sương.
+Camera: Slow cinematic aerial push-in.
+Lời dẫn: “Bạn có dám bước chân vào căn nhà gỗ cổ kính ở cuối làng, nơi mà ngay cả những người gan dạ nhất cũng không dám đi ngang qua sau khi trời tối?”
+
+PHÂN CẢNH 2 – NGÔI NHÀ BỊ LÃNG QUÊN
+Hình ảnh: Cận cảnh căn nhà gỗ mục nát. Mái ngói sụp xuống, những cánh cửa rung lên dù không có gió. Một chiếc xích đu cũ kỹ trước sân tự chuyển động.
+Camera: Slow tracking shot từ cổng vào nhà.
+Lời dẫn: “Người dân kể rằng, căn nhà ấy đã bị bỏ hoang gần năm mươi năm. Không ai biết chủ nhân cuối cùng của nó là ai. Nhưng có một điều tất cả đều biết…”
+
+PHÂN CẢNH 3 – NGỌN ĐÈN LÚC NỬA ĐÊM
+Hình ảnh: Đồng hồ quả lắc trong căn nhà cổ. Kim phút từ từ tiến đến số 12. Tiếng tích tắc ngày càng lớn. Đúng 00:00, ngọn đèn dầu trên bàn thờ đột nhiên bùng cháy.
+Camera: Extreme close-up đồng hồ → whip pan sang ngọn đèn.
+Lời dẫn: “Cứ đúng mười hai giờ đêm, ngọn đèn dầu trên bàn thờ lại tự động bốc cháy. Dù không có ai châm lửa. Dù căn nhà đã không còn điện hay người ở từ hàng chục năm trước.”
+
+PHÂN CẢNH 4 – TIẾNG BƯỚC CHÂN
+Hình ảnh: Hành lang tối om. Một vệt bóng đen thấp thoáng cuối hành lang. Sàn gỗ phát ra tiếng kẽo kẹt. Từng dấu chân ướt xuất hiện trên sàn, mặc dù không có ai.
+Camera: Low-angle tracking shot sát mặt sàn.
+Âm thanh: Tiếng gỗ cót két, tiếng bước chân chậm rãi, tiếng gió rít.
+Lời dẫn: “Nhưng điều đáng sợ nhất không phải ngọn đèn. Mà là tiếng bước chân. Đêm nào cũng vậy, cứ sau khi ngọn đèn sáng lên, lại có ai đó đi lại trong căn nhà.”
+
+PHÂN CẢNH 5 – NGƯỜI KHÁCH KHÔNG MỜI
+Hình ảnh: Một chàng trai trẻ tên Minh đứng trước cổng nhà, tay cầm đèn pin và chiếc máy quay cũ. Anh quyết định bước vào để tìm hiểu sự thật.
+Camera: Medium shot từ phía sau nhân vật, ánh đèn pin xuyên qua màn sương.
+Lời dẫn: “Một đêm nọ, Minh – chàng trai trẻ vừa trở về làng – quyết định tự mình khám phá bí mật ấy. Anh mang theo máy quay, đèn pin và một chiếc điện thoại. Anh tin rằng mọi câu chuyện ma quỷ đều có lời giải thích.”
+
+PHÂN CẢNH 6 – CÁNH CỬA TỰ MỞ
+Hình ảnh: Minh chạm tay vào cánh cửa gỗ. Cánh cửa từ từ mở ra với tiếng rít dài. Bên trong là một căn phòng phủ đầy bụi. Những bức ảnh gia đình cũ treo nghiêng trên tường.
+Camera: Over-the-shoulder shot, từ sau lưng Minh nhìn vào căn phòng.
+Lời dẫn: “Nhưng ngay khi anh vừa chạm vào cánh cửa, nó đã tự mở ra. Bên trong, mọi thứ vẫn được giữ nguyên như thể chủ nhân căn nhà chỉ vừa rời đi vài phút trước.”
+
+PHÂN CẢNH 7 – BỨC ẢNH KỲ LẠ
+Hình ảnh: Minh soi đèn pin vào một bức ảnh gia đình cũ. Trong ảnh có một người đàn ông, một người phụ nữ và một bé gái. Gương mặt bé gái bị cào xước gần như không thể nhận ra.
+Camera: Extreme close-up vào bức ảnh, sau đó chuyển nét sang gương mặt Minh.
+Lời dẫn: “Trên tường là bức ảnh của một gia đình ba người. Nhưng kỳ lạ thay, khuôn mặt cô bé trong ảnh đã bị ai đó cố tình cào nát.”
+
+PHÂN CẢNH 8 – TIẾNG THÌ THẦM
+Hình ảnh: Minh quay đầu về phía cầu thang. Một giọng nữ thì thầm vang lên ngay sau gáy. Ánh đèn pin chập chờn rồi tắt phụt.
+Camera: Close-up khuôn mặt Minh, camera từ từ xoay về phía bóng tối sau lưng.
+Lời dẫn: “Bỗng nhiên, một giọng nói rất nhỏ vang lên ngay sau lưng anh… Minh… cuối cùng anh cũng về rồi…”
+
+PHÂN CẢNH 9 – CĂN PHÒNG KHÓA KÍN
+Hình ảnh: Minh phát hiện một cánh cửa nhỏ dưới gầm cầu thang. Trên cửa có những vết cào sâu từ bên trong. Một chiếc ổ khóa gỉ sét nằm trên nền nhà.
+Camera: Slow dolly-in vào cánh cửa.
+Lời dẫn: “Anh lần theo âm thanh và phát hiện một căn phòng nhỏ bị khóa kín dưới gầm cầu thang. Trên cánh cửa là hàng chục vết cào sâu. Điều đáng sợ là… tất cả đều hướng từ bên trong ra ngoài.”
+
+PHÂN CẢNH 10 – CUỐN NHẬT KÝ 50 NĂM
+Hình ảnh: Minh phá khóa và bước vào. Một chiếc bàn phủ bụi nằm giữa phòng. Trên bàn là cuốn nhật ký đã ố vàng. Anh mở từng trang, những dòng chữ run rẩy hiện ra.
+Camera: Top-down shot vào cuốn nhật ký, chuyển sang close-up từng dòng chữ.
+Lời dẫn: “Trong căn phòng ấy, Minh tìm thấy một cuốn nhật ký cũ. Trang cuối cùng ghi lại một sự thật kinh hoàng: Ngày 17 tháng 10. Con gái tôi vẫn đang ở trong căn phòng này. Tôi đã khóa cửa lại. Nhưng đêm nào nó cũng khóc. Nó nói rằng… người chết trong nhà không phải là nó.”
+
+PHÂN CẢNH 11 – SỰ THẬT BỊ CHÔN GIẤU
+Hình ảnh: Những đoạn ký ức chớp nhoáng hiện ra: người đàn ông trong ảnh đóng sầm cửa phòng, người phụ nữ khóc lóc, cô bé đập cửa trong tuyệt vọng. Sau đó, ngọn đèn dầu tắt phụt.
+Camera: Flashback montage, handheld camera, dramatic cuts.
+Lời dẫn: “Minh bắt đầu hiểu ra. Năm mươi năm trước, một bi kịch đã xảy ra trong căn nhà này. Một cô bé bị nhốt trong căn phòng tối suốt nhiều ngày. Nhưng người dân trong làng lại được thông báo rằng cô bé đã chết vì bệnh.”
+
+PHÂN CẢNH 12 – NGƯỜI ĐÀN BÀ CUỐI HÀNH LANG
+Hình ảnh: Minh bước ra khỏi phòng. Ở cuối hành lang xuất hiện một người phụ nữ mặc áo trắng, mái tóc dài che kín mặt. Bà đứng bất động, hai tay buông thõng.
+Camera: Long shot, slow zoom-in.
+Lời dẫn: “Nhưng trước khi Minh kịp rời đi, một bóng người xuất hiện ở cuối hành lang. Đó là một người phụ nữ mặc áo trắng. Bà ta đứng im lặng… nhìn thẳng vào anh.”
+
+PHÂN CẢNH 13 – ĐỪNG NGOẢNH ĐẦU
+Hình ảnh: Minh nghe thấy tiếng bước chân phía sau. Anh chạy dọc hành lang, những cánh cửa liên tục đóng sầm. Tiếng thì thầm ngày càng gần.
+Camera: Handheld chase shot, rapid cuts, slight motion blur.
+Lời dẫn: “Anh lao về phía cửa chính. Nhưng càng chạy, hành lang càng trở nên dài hơn. Và giọng nói ấy vẫn không ngừng gọi tên anh: Minh… đừng đi… Minh… quay lại nhìn mẹ đi con…”
+
+PHÂN CẢNH 14 – KHUÔN MẶT TRONG GƯƠNG
+Hình ảnh: Minh vô tình nhìn vào chiếc gương cũ treo trên tường. Trong gương, phía sau anh không phải người phụ nữ áo trắng… mà là một bé gái đang đứng sát lưng anh, khuôn mặt đầy vết bầm tím.
+Camera: Mirror reflection reveal, extreme close-up.
+Lời dẫn: “Trong khoảnh khắc tuyệt vọng, Minh nhìn thấy một thứ khiến anh chết lặng. Trong gương, người đứng sau lưng anh không phải người phụ nữ. Mà là cô bé trong bức ảnh gia đình.”
+
+PHÂN CẢNH 15 – CÚ TWIST
+Hình ảnh: Bé gái từ từ ngẩng đầu. Gương mặt cô bé giống hệt Minh. Căn phòng rung chuyển, những tấm ảnh trên tường rơi xuống. Một tấm ảnh cũ hiện rõ: cô bé đứng cạnh người đàn ông, trên mặt sau ghi dòng chữ: “Con gái yêu – Minh”.
+Camera: Slow push-in vào tấm ảnh, sau đó hard cut sang khuôn mặt Minh.
+Lời dẫn: “Nhưng sự thật còn kinh hoàng hơn. Cô bé ấy không phải một người xa lạ. Cô chính là Minh… trong một ký ức mà anh đã bị buộc phải quên từ khi còn nhỏ. Và người đàn bà kia… chính là mẹ anh.”
+
+PHÂN CẢNH 16 – NGƯỜI TIẾP THEO
+Hình ảnh: Sáng hôm sau, căn nhà vẫn im lìm. Cánh cửa khép kín. Một người dân đi ngang qua nhìn vào cửa sổ. Bên trong, ngọn đèn dầu vẫn cháy. Trên bàn thờ xuất hiện một bức ảnh mới: Minh đang mỉm cười, đứng cạnh cô bé trong bức ảnh cũ.
+Camera: Slow pull-back khỏi căn nhà, dần chìm vào màn sương.
+Lời dẫn: “Sáng hôm sau, Minh biến mất. Không ai tìm thấy anh. Chỉ có một bức ảnh mới xuất hiện trên bàn thờ. Và kể từ đêm đó, mỗi khi đồng hồ điểm mười hai giờ… người ta lại nghe thấy hai giọng nói thì thầm bên trong căn nhà: Mẹ ơi… tối nay có khách mới.”`;
+
+    const scenesData = [
+      { order: 1, title: 'Lời Cảnh Báo', dur: 9.5, cam: 'slow_push_in', desc: 'Flycam lướt qua ngôi làng hẻo lánh và căn nhà gỗ cô độc trong sương mù', narr: 'Bạn có dám bước chân vào căn nhà gỗ cổ kính ở cuối làng, nơi mà ngay cả những người gan dạ nhất cũng không dám đi ngang qua sau khi trời tối?' },
+      { order: 2, title: 'Ngôi Nhà Bị Lãng Quên', dur: 10.0, cam: 'pan_left', desc: 'Căn nhà gỗ mục nát, xích đu cũ kỹ trước sân tự chuyển động trong gió lạnh', narr: 'Người dân kể rằng, căn nhà ấy đã bị bỏ hoang gần năm mươi năm. Không ai biết chủ nhân cuối cùng của nó là ai. Nhưng có một điều tất cả đều biết…' },
+      { order: 3, title: 'Ngọn Đèn Lúc Nửa Đêm', dur: 11.0, cam: 'push_in', desc: 'Đồng hồ quả lắc điểm đúng 00:00, ngọn đèn dầu trên bàn thờ đột nhiên bốc cháy', narr: 'Cứ đúng mười hai giờ đêm, ngọn đèn dầu trên bàn thờ lại tự động bốc cháy. Dù không có ai châm lửa. Dù căn nhà đã không còn điện hay người ở từ hàng chục năm trước.' },
+      { order: 4, title: 'Tiếng Bước Chân', dur: 10.5, cam: 'tracking', desc: 'Hành lang tối om, sàn gỗ kẽo kẹt và từng dấu chân ướt hiện dần trên sàn', narr: 'Nhưng điều đáng sợ nhất không phải ngọn đèn. Mà là tiếng bước chân. Đêm nào cũng vậy, cứ sau khi ngọn đèn sáng lên, lại có ai đó đi lại trong căn nhà.' },
+      { order: 5, title: 'Người Khách Không Mời', dur: 12.0, cam: 'slow_push_in', desc: 'Minh cầm đèn pin và máy quay bước vào khám phá sự thật', narr: 'Một đêm nọ, Minh – chàng trai trẻ vừa trở về làng – quyết định tự mình khám phá bí mật ấy. Anh mang theo máy quay, đèn pin và một chiếc điện thoại. Anh tin rằng mọi câu chuyện ma quỷ đều có lời giải thích.' },
+      { order: 6, title: 'Cánh Cửa Tự Mở', dur: 10.5, cam: 'pan_right', desc: 'Cánh cửa gỗ tự mở với tiếng rít dài, căn phòng phủ bụi và khung ảnh cũ nghiêng', narr: 'Nhưng ngay khi anh vừa chạm vào cánh cửa, nó đã tự mở ra. Bên trong, mọi thứ vẫn được giữ nguyên như thể chủ nhân căn nhà chỉ vừa rời đi vài phút trước.' },
+      { order: 7, title: 'Bức Ảnh Kỳ Lạ', dur: 9.5, cam: 'push_in', desc: 'Minh soi đèn vào bức ảnh gia đình có gương mặt bé gái bị cào xước nát', narr: 'Trên tường là bức ảnh của một gia đình ba người. Nhưng kỳ lạ thay, khuôn mặt cô bé trong ảnh đã bị ai đó cố tình cào nát.' },
+      { order: 8, title: 'Tiếng Thì Thầm', dur: 8.5, cam: 'static', desc: 'Minh quay đầu về cầu thang, giọng nữ thì thầm sau gáy và đèn pin tắt phụt', narr: 'Bỗng nhiên, một giọng nói rất nhỏ vang lên ngay sau lưng anh… Minh… cuối cùng anh cũng về rồi…' },
+      { order: 9, title: 'Căn Phòng Khóa Kín', dur: 11.0, cam: 'slow_push_in', desc: 'Căn phòng nhỏ gầm cầu thang có ổ khóa rỉ sét và hàng chục vết cào từ trong ra', narr: 'Anh lần theo âm thanh và phát hiện một căn phòng nhỏ bị khóa kín dưới gầm cầu thang. Trên cánh cửa là hàng chục vết cào sâu. Điều đáng sợ là… tất cả đều hướng từ bên trong ra ngoài.' },
+      { order: 10, title: 'Cuốn Nhật Ký 50 Năm', dur: 14.0, cam: 'push_in', desc: 'Cuốn nhật ký ố vàng với trang cuối: Người chết trong nhà không phải là nó', narr: 'Trong căn phòng ấy, Minh tìm thấy một cuốn nhật ký cũ. Trang cuối cùng ghi lại một sự thật kinh hoàng: Ngày 17 tháng 10. Con gái tôi vẫn đang ở trong căn phòng này. Tôi đã khóa cửa lại. Nhưng đêm nào nó cũng khóc. Nó nói rằng… người chết trong nhà không phải là nó.' },
+      { order: 11, title: 'Sự Thật Bị Chôn Giấu', dur: 13.0, cam: 'pan_left', desc: 'Ký ức chớp nhoáng: người đàn ông đóng sầm cửa, người phụ nữ khóc, cô bé đập cửa', narr: 'Minh bắt đầu hiểu ra. Năm mươi năm trước, một bi kịch đã xảy ra trong căn nhà này. Một cô bé bị nhốt trong căn phòng tối suốt nhiều ngày. Nhưng người dân trong làng lại được thông báo rằng cô bé đã chết vì bệnh.' },
+      { order: 12, title: 'Người Đàn Bà Cuối Hành Lang', dur: 10.5, cam: 'slow_push_in', desc: 'Người phụ nữ áo trắng tóc dài che kín mặt đứng bất động cuối hành lang', narr: 'Nhưng trước khi Minh kịp rời đi, một bóng người xuất hiện ở cuối hành lang. Đó là một người phụ nữ mặc áo trắng. Bà ta đứng im lặng… nhìn thẳng vào anh.' },
+      { order: 13, title: 'Đừng Ngoảnh Đầu', dur: 11.5, cam: 'tracking', desc: 'Minh chạy dọc hành lang vô tận, các cánh cửa đóng sầm và tiếng thì thầm gọi tên', narr: 'Anh lao về phía cửa chính. Nhưng càng chạy, hành lang càng trở nên dài hơn. Và giọng nói ấy vẫn không ngừng gọi tên anh: Minh… đừng đi… Minh… quay lại nhìn mẹ đi con…' },
+      { order: 14, title: 'Khuôn Mặt Trong Gương', dur: 11.0, cam: 'push_in', desc: 'Trong gương, phía sau Minh là cô bé trong bức ảnh với khuôn mặt bầm tím', narr: 'Trong khoảnh khắc tuyệt vọng, Minh nhìn thấy một thứ khiến anh chết lặng. Trong gương, người đứng sau lưng anh không phải người phụ nữ. Mà là cô bé trong bức ảnh gia đình.' },
+      { order: 15, title: 'Cú Twist', dur: 12.5, cam: 'slow_push_in', desc: 'Bé gái giống hệt Minh, mặt sau tấm ảnh ghi: Con gái yêu - Minh. Người đàn bà chính là mẹ', narr: 'Nhưng sự thật còn kinh hoàng hơn. Cô bé ấy không phải một người xa lạ. Cô chính là Minh… trong một ký ức mà anh đã bị buộc phải quên từ khi còn nhỏ. Và người đàn bà kia… chính là mẹ anh.' },
+      { order: 16, title: 'Người Tiếp Theo', dur: 15.0, cam: 'pull_out', desc: 'Sáng hôm sau Minh biến mất, bàn thờ có ảnh mới của Minh: Mẹ ơi, tối nay có khách mới', narr: 'Sáng hôm sau, Minh biến mất. Không ai tìm thấy anh. Chỉ có một bức ảnh mới xuất hiện trên bàn thờ. Và kể từ đêm đó, mỗi khi đồng hồ điểm mười hai giờ… người ta lại nghe thấy hai giọng nói thì thầm bên trong căn nhà: Mẹ ơi… tối nay có khách mới.' },
+    ];
+
+    let curF = 0;
+    const horrorScenes = scenesData.map((sd) => {
+      const fCount = Math.round(sd.dur * 30);
+      const sc: SceneItem = {
+        scene_id: `scene_${String(sd.order).padStart(3, '0')}`,
+        scene_order: sd.order,
+        chapter_order: Math.ceil(sd.order / 4),
+        scene_type: sd.order === 1 ? 'hook' : sd.order === 15 ? 'twist' : sd.order === 16 ? 'cta' : 'narrative',
+        narration_text: sd.narr,
+        duration_seconds: sd.dur,
+        start_frame: curF,
+        end_frame: curF + fCount,
+        visual_method: 'horror',
+        visual_description: sd.desc,
+        camera_direction: sd.cam as any,
+        visual_config: {},
+        subtitles_json: [],
+        assets: [],
+      };
+      curF += fCount;
+      return sc;
+    });
+
+    const totalDur = horrorScenes.reduce((a, s) => a + s.duration_seconds, 0);
+
     return {
-      topic: title || 'Bí Ẩn Căn Nhà Ma Cuối Làng',
+      topic: title || 'Căn Nhà Gỗ Cuối Làng',
       script,
       manifest: {
         episode_id: episodeId,
-        title: title || 'Bí Ẩn Căn Nhà Ma Cuối Làng',
+        title: title || 'Căn Nhà Gỗ Cuối Làng',
         genre: 'horror',
         video_format: videoType,
         aspect_ratio,
-        total_duration_sec: 28.0,
-        total_frames: 840,
+        total_duration_sec: totalDur,
+        total_frames: curF,
         voice_config: { voice: 'vi-VN-NamMinhNeural', rate: '+0%', pitch: '+0Hz' },
         video_specs: { width, height, fps: 30 },
         audio_specs: { target_lufs: -14.0, true_peak: -1.0 },
-        scenes: [
-          {
-            scene_order: 1,
-            scene_type: 'hook',
-            narration_text: 'Bạn có dám bước chân vào căn nhà gỗ cổ kính ở cuối làng khi màn đêm buông xuống?',
-            duration_seconds: 6.5,
-            start_frame: 0,
-            end_frame: 195,
-            visual_method: 'horror',
-            camera_direction: 'slow_push_in',
-            visual_config: {},
-            subtitles_json: [],
-            assets: [],
-          },
-          {
-            scene_order: 2,
-            scene_type: 'context',
-            narration_text: 'Cứ đúng mười hai giờ đêm, ngọn đèn dầu trên bàn thờ lại tự bốc cháy lập lòe trong sương mù.',
-            duration_seconds: 7.0,
-            start_frame: 195,
-            end_frame: 405,
-            visual_method: 'horror',
-            camera_direction: 'pan_left',
-            visual_config: {},
-            subtitles_json: [],
-            assets: [],
-          },
-          {
-            scene_order: 3,
-            scene_type: 'climax',
-            narration_text: 'Những tiếng bước chân kẽo kẹt vang lên từng hồi trên sàn gỗ mục nát, dẫn lối người tò mò vào một bí mật bị chôn giấu suốt nửa thế kỷ.',
-            duration_seconds: 8.5,
-            start_frame: 405,
-            end_frame: 660,
-            visual_method: 'horror',
-            camera_direction: 'push_in',
-            visual_config: {},
-            subtitles_json: [],
-            assets: [],
-          },
-          {
-            scene_order: 4,
-            scene_type: 'cta',
-            narration_text: 'Đừng bao giờ ngoảnh đầu lại nếu nghe thấy tiếng thì thầm gọi tên mình từ phía sau bóng tối!',
-            duration_seconds: 6.0,
-            start_frame: 660,
-            end_frame: 840,
-            visual_method: 'horror',
-            camera_direction: 'static',
-            visual_config: {},
-            subtitles_json: [],
-            assets: [],
-          },
-        ]
+        scenes: horrorScenes,
       }
     };
   }
@@ -637,37 +719,121 @@ export const ScriptStudioPage: React.FC = () => {
     }));
   };
 
+  const parseClientScreenplay = (rawText: string) => {
+    const sceneRegex = /^\s*(?:PHÂN CẢNH|CẢNH|SCENE)\s+(\d+)[\s:–—]*(.*?)$/gim;
+    const matches = [...rawText.matchAll(sceneRegex)];
+    if (matches.length === 0) return null;
+
+    const headerRegex = /^\s*(?:Hình ảnh|Camera|Âm thanh|Lời dẫn|Giọng nữ thì thầm|Giọng đọc nhật ký|Thoại|Kết thúc[^\n]*)\s*:/gim;
+    const scenes: any[] = [];
+
+    for (let i = 0; i < matches.length; i++) {
+      const m = matches[i];
+      const num = parseInt(m[1], 10);
+      const title = m[2].replace(/[–—:-]/g, '').trim();
+      const startIdx = m.index! + m[0].length;
+      const endIdx = i + 1 < matches.length ? matches[i + 1].index! : rawText.length;
+      let block = rawText.slice(startIdx, endIdx).trim();
+
+      const footerPos = block.indexOf('🎧');
+      if (footerPos !== -1) block = block.slice(0, footerPos).trim();
+
+      const headerMatches = [...block.matchAll(headerRegex)];
+      let visual = '';
+      let camera = '';
+      let sound = '';
+      const narrations: string[] = [];
+
+      for (let hIdx = 0; hIdx < headerMatches.length; hIdx++) {
+        const hm = headerMatches[hIdx];
+        const hTitle = hm[0].toLowerCase();
+        const contentStart = hm.index! + hm[0].length;
+        const contentEnd = hIdx + 1 < headerMatches.length ? headerMatches[hIdx + 1].index! : block.length;
+        const content = block.slice(contentStart, contentEnd).trim();
+
+        if (hTitle.includes('hình ảnh')) {
+          visual = content;
+        } else if (hTitle.includes('camera')) {
+          camera = content;
+        } else if (hTitle.includes('âm thanh')) {
+          sound = content;
+        } else if (hTitle.includes('lời dẫn') || hTitle.includes('giọng') || hTitle.includes('thoại') || hTitle.includes('kết thúc')) {
+          const clean = content.replace(/^[“"''‘]+|[”"''’]+$/g, '').trim();
+          if (clean) narrations.push(clean);
+        }
+      }
+
+      const narration = narrations.length > 0 ? narrations.join(' ') : title;
+      scenes.push({
+        order: num,
+        title,
+        visual,
+        camera,
+        sound,
+        narration,
+      });
+    }
+    return scenes;
+  };
+
   const handleAnalyzeScript = async () => {
     if (!scriptText.trim()) return;
     setIsAnalyzing(true);
     setNotice(null);
 
     try {
-      const data = await apiClient.analyzeScript({
-        script_text: scriptText,
-        target_duration_seconds: targetDurationSec || estimatedDurationSec,
-        genre: selectedGenre,
-        video_format: videoFormat,
-      });
+      let data: any = null;
+      try {
+        data = await apiClient.analyzeScript({
+          script_text: scriptText,
+          target_duration_seconds: targetDurationSec || estimatedDurationSec,
+          genre: selectedGenre,
+          video_format: videoFormat,
+        });
+      } catch (apiErr) {
+        console.warn('Backend analyze API error, falling back to local NLP screenplay parser:', apiErr);
+      }
 
-      // Construct fresh SceneManifest from structured analysis
+      const clientScenes = parseClientScreenplay(scriptText);
       const isLong = videoFormat === 'long-form';
       const fps = 30;
       let currentFrame = 0;
 
-      const convertedScenes: SceneItem[] = data.scenes.map((s: any, idx: number) => {
+      let rawScenes: any[] = [];
+      if (clientScenes && clientScenes.length > 0) {
+        rawScenes = clientScenes.map((cs) => {
+          const wordCount = cs.narration.split(/\s+/).filter(Boolean).length;
+          const durSec = Math.max(4.0, Math.min(18.0, Math.round((wordCount / 2.8) * 10) / 10));
+          return {
+            scene_order: cs.order,
+            scene_type: cs.order === 1 ? 'hook' : cs.order === clientScenes.length ? 'cta' : 'narrative',
+            narration_text: cs.narration,
+            duration_seconds: durSec,
+            visual_method: (selectedGenre === 'horror' || cs.title.toLowerCase().includes('ma') || cs.title.toLowerCase().includes('lời cảnh báo')) ? 'horror' : 'photo',
+            visual_description: cs.visual,
+            camera_direction: cs.camera || 'slow_push_in',
+            suggested_asset_keywords: [cs.title, selectedGenre],
+          };
+        });
+      } else if (data?.scenes && data.scenes.length > 0) {
+        rawScenes = data.scenes;
+      } else {
+        throw new Error('Không thể phân tích kịch bản. Vui lòng kiểm tra định dạng phân cảnh.');
+      }
+
+      const convertedScenes: SceneItem[] = rawScenes.map((s: any, idx: number) => {
         const durationSec = Number(s.duration_seconds) || 4.0;
         const frames = Math.round(durationSec * fps);
         const scene: SceneItem = {
           scene_id: s.scene_id || `scene_${String(idx + 1).padStart(3, '0')}`,
           scene_order: s.scene_order || idx + 1,
-          chapter_order: s.chapter_order || 1,
+          chapter_order: s.chapter_order || Math.ceil((idx + 1) / 4),
           scene_type: s.scene_type || 'narrative',
           narration_text: s.narration_text || '',
           duration_seconds: durationSec,
           start_frame: currentFrame,
           end_frame: currentFrame + frames,
-          visual_method: s.visual_method || 'photo',
+          visual_method: s.visual_method || (selectedGenre === 'horror' ? 'horror' : 'photo'),
           visual_description: s.visual_description || '',
           visual_config: {},
           subtitles_json: [],
@@ -690,10 +856,19 @@ export const ScriptStudioPage: React.FC = () => {
 
       const totalSec = convertedScenes.reduce((a, s) => a + s.duration_seconds, 0);
 
+      // Extract title from script if formatted like 🎬 CĂN NHÀ GỖ CUỐI LÀNG
+      let screenplayTitle = data?.title || project?.title || 'Video AI';
+      for (const line of scriptText.split('\n').slice(0, 5)) {
+        if (line.includes('🎬')) {
+          screenplayTitle = line.replace('🎬', '').trim();
+          break;
+        }
+      }
+
       setManifest({
         episode_id: projectId || 'ep_active',
-        title: data.title || project?.title || 'Video AI',
-        genre: data.genre || selectedGenre,
+        title: screenplayTitle,
+        genre: data?.genre || selectedGenre,
         video_format: videoFormat,
         aspect_ratio: isLong ? '16:9' : '9:16',
         total_duration_sec: totalSec,
@@ -713,7 +888,7 @@ export const ScriptStudioPage: React.FC = () => {
           true_peak: -1.0,
         },
         scenes: convertedScenes,
-        chapters: data.chapters || []
+        chapters: data?.chapters || []
       });
 
       setNotice(`Phân tích kịch bản thành công theo thể loại ${currentGenreObj?.display_name || selectedGenre}!`);
@@ -1401,8 +1576,6 @@ export const ScriptStudioPage: React.FC = () => {
               activeSceneIndex={activeSceneIndex}
               onSelectScene={(idx) => {
                 setActiveSceneIndex(idx);
-                const startSec = manifest.scenes.slice(0, idx).reduce((a, s) => a + s.duration_seconds, 0);
-                setCurrentTimeSec(startSec);
               }}
               currentTimeSec={currentTimeSec}
               onSeekTime={(t) => setCurrentTimeSec(t)}

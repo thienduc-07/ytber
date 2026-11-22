@@ -18,16 +18,16 @@ interface TimelineEditorProps {
 }
 
 export const VISUAL_METHODS = [
-  { id: 'anatomy', label: '🫀 Giải Phẫu & Cơ Quan Nội Tạng (Anatomical Heart/Organs)', icon: '🫀' },
-  { id: 'schematic', label: '🔬 Sơ Đồ Nguyên Lý Khoa Học (Technical Blueprint & Radar)', icon: '🔬' },
-  { id: 'horror', label: '👻 Phim Ma & Kinh Dị (Haunted House, Fog & Moon)', icon: '👻' },
-  { id: 'presenter', label: '👨‍⚕️ Người Thuyết Minh Chuyên Gia (Doctor/Presenter Lip-Sync)', icon: '👨‍⚕️' },
-  { id: 'toon', label: '🎨 Hoạt Họa 2.5D (Articulated Rig & Parallax)', icon: '🎨' },
-  { id: 'map', label: '🗺️ Bản Đồ Vector & Tuyến Hành Quân', icon: '🗺️' },
-  { id: 'infographic', label: '📊 Infographic Số Liệu & Biểu Đồ Động', icon: '📊' },
-  { id: 'archival', label: '🏛️ Tư Liệu Trực Quan Lịch Sử', icon: '🏛️' },
-  { id: 'photo', label: '📷 Ảnh Minh Họa', icon: '📷' },
-  { id: 'stock', label: '🎬 Thước Phim (Stock Footage)', icon: '🎬' },
+  { id: 'anatomy', label: 'Giải Phẫu & Cơ Quan Nội Tạng (Anatomical Heart/Organs)', icon: '🫀' },
+  { id: 'schematic', label: 'Sơ Đồ Nguyên Lý Khoa Học (Technical Blueprint & Radar)', icon: '🔬' },
+  { id: 'horror', label: 'Phim Ma & Kinh Dị (Haunted House, Fog & Moon)', icon: '👻' },
+  { id: 'presenter', label: 'Người Thuyết Minh Chuyên Gia (Doctor/Presenter Lip-Sync)', icon: '👨‍⚕️' },
+  { id: 'toon', label: 'Hoạt Họa 2.5D (Articulated Rig & Parallax)', icon: '🎨' },
+  { id: 'map', label: 'Bản Đồ Vector & Tuyến Hành Quân', icon: '🗺️' },
+  { id: 'infographic', label: 'Infographic Số Liệu & Biểu Đồ Động', icon: '📊' },
+  { id: 'archival', label: 'Tư Liệu Trực Quan Lịch Sử', icon: '🏛️' },
+  { id: 'photo', label: 'Ảnh Minh Họa', icon: '📷' },
+  { id: 'stock', label: 'Thước Phim (Stock Footage)', icon: '🎬' },
 ];
 
 export const CAMERA_DIRECTIONS = [

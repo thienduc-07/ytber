@@ -2,7 +2,8 @@ import React, { useRef, useState, useEffect } from 'react';
 import type { SceneManifest } from '../../types/database';
 import { AnimationEngine } from '../../services/animationEngine';
 import { 
-  Play, Pause, RotateCcw, Volume2, VolumeX, ChevronLeft, ChevronRight, SkipBack, SkipForward
+  Play, Pause, RotateCcw, Volume2, VolumeX, ChevronLeft, ChevronRight, SkipBack, SkipForward,
+  Maximize2, Minimize2, Keyboard
 } from 'lucide-react';
 
 interface RemotionPlayerProps {
@@ -19,9 +20,40 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [localTime, setLocalTime] = useState(currentTimeSec);
 
   const totalDuration = manifest.scenes.reduce((acc, s) => acc + s.duration_seconds, 0) || 60;
+
+  // Keyboard Shortcuts: Space to Play/Pause, ` to Toggle Fullscreen, Esc to Exit Fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setIsPlaying((prev) => !prev);
+      } else if (e.key === '`' || e.code === 'Backquote') {
+        e.preventDefault();
+        setIsFullscreen((prev) => !prev);
+      } else if (e.key === 'Escape' && isFullscreen) {
+        e.preventDefault();
+        setIsFullscreen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   // Sync local time with external timeline playhead changes
   useEffect(() => {
@@ -202,20 +234,53 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center bg-studio-surface border border-studio-border rounded-2xl p-4 shadow-2xl w-full">
-      {/* DaVinci Resolve Top Timecode Bar */}
-      <div className="w-full flex items-center justify-between pb-2 mb-2 border-b border-gray-800 text-xs">
-        <span className="font-bold text-gray-300">Khung Hình Xem Trước</span>
-        <div className="flex items-center gap-1.5 bg-[#070b16] border border-studio-border px-2.5 py-1 rounded-lg">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="font-mono text-emerald-400 font-bold tracking-wider text-xs">
-            {formatTimecode(localTime)}
+    <div className={`flex flex-col items-center transition-all ${
+      isFullscreen 
+        ? 'fixed inset-0 z-50 bg-[#030712]/95 backdrop-blur-2xl p-6 justify-center' 
+        : 'bg-studio-surface border border-studio-border rounded-2xl p-4 shadow-2xl w-full'
+    }`}>
+      {/* DaVinci Resolve Top Timecode Bar & Shortcut Badge */}
+      <div className={`w-full flex items-center justify-between pb-2 mb-2 border-b border-gray-800 text-xs ${
+        isFullscreen ? 'max-w-[720px]' : ''
+      }`}>
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-gray-200">
+            {isFullscreen ? '🖥️ Xem Trước Toàn Màn Hình' : 'Khung Hình Xem Trước'}
           </span>
+          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] bg-[#070b16] border border-studio-border/70 px-2 py-0.5 rounded-full text-gray-400 font-mono">
+            <Keyboard className="w-3 h-3 text-studio-primary" />
+            Space: Phát | `: Toàn màn hình
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-[#070b16] border border-studio-border px-2.5 py-1 rounded-lg">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-mono text-emerald-400 font-bold tracking-wider text-xs">
+              {formatTimecode(localTime)}
+            </span>
+          </div>
+
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="p-1.5 hover:text-white rounded-lg bg-studio-card/80 hover:bg-studio-card border border-studio-border text-gray-400 transition"
+            title={isFullscreen ? 'Thu nhỏ lại (Nhấn ` hoặc Esc)' : 'Phóng to toàn màn hình (Nhấn `)'}
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4 text-studio-primary" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
         </div>
       </div>
 
       {/* Dynamic Aspect Ratio Canvas Preview */}
-      <div className={`relative ${manifest.video_format === 'long-form' ? 'aspect-[16/9] max-w-[420px]' : 'aspect-[9/16] max-w-[280px]'} w-full bg-black rounded-xl overflow-hidden shadow-inner border border-studio-border`}>
+      <div className={`relative ${
+        isFullscreen
+          ? manifest.video_format === 'long-form' 
+            ? 'w-[90vw] max-w-[1100px] aspect-[16/9]' 
+            : 'h-[75vh] max-h-[820px] aspect-[9/16]'
+          : manifest.video_format === 'long-form' 
+            ? 'aspect-[16/9] max-w-[420px]' 
+            : 'aspect-[9/16] max-w-[280px]'
+      } w-full bg-black rounded-xl overflow-hidden shadow-2xl border border-studio-border`}>
         <canvas
           ref={canvasRef}
           width={manifest.video_specs?.width || 1080}
@@ -234,7 +299,7 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
       </div>
 
       {/* DaVinci Resolve Professional Transport Controls */}
-      <div className="w-full max-w-[340px] mt-3 flex flex-col gap-2">
+      <div className={`w-full ${isFullscreen ? 'max-w-[480px]' : 'max-w-[340px]'} mt-3 flex flex-col gap-2`}>
         {/* Continuous Scrubber Slider */}
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-gray-400 font-mono w-10 text-right">
@@ -279,7 +344,7 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
           <button
             onClick={() => setIsPlaying(!isPlaying)}
             className="p-2.5 bg-studio-primary hover:bg-indigo-600 text-white rounded-xl shadow transition"
-            title={isPlaying ? 'Tạm dừng (Space)' : 'Phát (Space)'}
+            title={isPlaying ? 'Tạm dừng (Phím Space)' : 'Phát (Phím Space)'}
           >
             {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
           </button>
@@ -316,6 +381,14 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
             title={isMuted ? 'Bật âm' : 'Tắt âm'}
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4" />}
+          </button>
+
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="p-1.5 hover:text-white rounded-lg hover:bg-studio-card transition ml-1"
+            title={isFullscreen ? 'Thu nhỏ lại (Phím `)' : 'Toàn màn hình (Phím `)'}
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4 text-studio-primary" /> : <Maximize2 className="w-4 h-4" />}
           </button>
         </div>
       </div>

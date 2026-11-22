@@ -55,7 +55,8 @@ class CharacterRig2D:
         char_id: str,
         root_transform: str,
         pose: str,
-        expression: str
+        expression: str,
+        duration: float = 4.0
     ) -> Dict[str, Any]:
         """Renders an expressive character holding a flashlight in an eerie environment."""
         p = char_id

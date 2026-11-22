@@ -1346,111 +1346,857 @@ export class AnimationEngine {
   }
 
   /**
-   * Domain Visual: Atmospheric Horror (Ancient Abandoned House, Fog & Moon)
+   * Domain Visual: Atmospheric Horror (Dynamic Multi-Scene Code-First Engine - Phương Án 2)
+   * Intelligently renders distinct, cinematic 2.5D visual compositions tailored to the exact
+   * narrative beat, props, characters, lighting, and camera angle of each scene.
    */
   private static renderHorrorVisual(
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
-    _scene: SceneItem,
-    _localT: number,
+    scene: SceneItem,
+    localT: number,
     globalT: number
   ) {
     ctx.save();
 
-    // 1. Midnight Dark Violet / Black Sky
-    const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
-    skyGrad.addColorStop(0, '#04040A');
-    skyGrad.addColorStop(0.65, '#0B0D18');
-    skyGrad.addColorStop(1, '#020306');
-    ctx.fillStyle = skyGrad;
-    ctx.fillRect(0, 0, w, h);
+    const text = (scene.narration_text || '').toLowerCase();
+    const desc = (scene.visual_description || '').toLowerCase();
+    const order = scene.scene_order || 1;
 
-    // 2. Full Moon with Halo
-    const moonX = w * 0.72;
-    const moonY = h * 0.20;
-    const moonR = Math.min(w, h) * 0.10;
+    // Detect scene context
+    const isAerial = order === 1 || text.includes('flycam') || desc.includes('flycam') || text.includes('ngôi làng') || desc.includes('ngôi làng');
+    const isSwing = order === 2 || text.includes('xích đu') || desc.includes('xích đu') || text.includes('lãng quên') || desc.includes('mục nát');
+    const isClockAltar = order === 3 || text.includes('đồng hồ') || desc.includes('đồng hồ') || text.includes('ngọn đèn') || text.includes('bàn thờ');
+    const isFootprints = order === 4 || text.includes('bước chân') || desc.includes('dấu chân') || text.includes('dấu chân');
+    const isMinhFlashlight = order === 5 || text.includes('người khách') || desc.includes('đèn pin') && text.includes('máy quay');
+    const isDoorOpen = order === 6 || text.includes('cánh cửa tự mở') || desc.includes('cửa từ từ mở');
+    const isFamilyPhoto = order === 7 || text.includes('bức ảnh kỳ lạ') || desc.includes('cào xước') || text.includes('cào nát');
+    const isWhisperShadow = order === 8 || text.includes('thì thầm') || desc.includes('sau gáy') || text.includes('sau lưng');
+    const isLockedDoor = order === 9 || text.includes('khóa kín') || desc.includes('gầm cầu thang') || text.includes('vết cào sâu');
+    const isDiary = order === 10 || text.includes('nhật ký') || desc.includes('nhật ký') || text.includes('ngày 17 tháng 10');
+    const isFlashback = order === 11 || text.includes('chôn giấu') || desc.includes('flashback') || text.includes('bi kịch');
+    const isWhiteWoman = order === 12 || text.includes('người đàn bà') || desc.includes('áo trắng') || text.includes('tóc dài');
+    const isChase = order === 13 || text.includes('ngoảnh đầu') || desc.includes('chạy dọc') || text.includes('lao về phía');
+    const isMirror = order === 14 || text.includes('trong gương') || desc.includes('chiếc gương') || text.includes('bầm tím');
+    const isTwist = order === 15 || text.includes('cú twist') || desc.includes('con gái yêu') || text.includes('chính là minh');
+    const isMorning = order === 16 || text.includes('tiếp theo') || text.includes('sáng hôm sau') || desc.includes('sáng hôm sau');
 
-    const halo = ctx.createRadialGradient(moonX, moonY, moonR * 0.8, moonX, moonY, moonR * 2.8);
-    halo.addColorStop(0, 'rgba(254, 243, 199, 0.45)');
-    halo.addColorStop(0.5, 'rgba(254, 243, 199, 0.12)');
-    halo.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = halo;
-    ctx.beginPath();
-    ctx.arc(moonX, moonY, moonR * 2.8, 0, Math.PI * 2);
-    ctx.fill();
+    if (isAerial) {
+      // SCENE 1: Cinematic Aerial Push-In over Vietnamese Village in Night Mist
+      const sky = ctx.createLinearGradient(0, 0, 0, h);
+      sky.addColorStop(0, '#020308');
+      sky.addColorStop(0.5, '#070A18');
+      sky.addColorStop(1, '#03050B');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, w, h);
 
-    ctx.fillStyle = '#FEF3C7';
-    ctx.beginPath();
-    ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 3. Ancient Wooden House Silhouette
-    const houseY = h * 0.52;
-    ctx.fillStyle = '#06070D';
-    ctx.beginPath();
-    // Base foundation
-    ctx.rect(w * 0.15, houseY, w * 0.70, h * 0.28);
-    ctx.fill();
-
-    // Tilted roof with curved eaves
-    ctx.beginPath();
-    ctx.moveTo(w * 0.08, houseY + 15);
-    ctx.lineTo(w * 0.50, houseY - 90);
-    ctx.lineTo(w * 0.92, houseY + 15);
-    ctx.lineTo(w * 0.84, houseY + 25);
-    ctx.lineTo(w * 0.50, houseY - 65);
-    ctx.lineTo(w * 0.16, houseY + 25);
-    ctx.closePath();
-    ctx.fill();
-
-    // Crooked wooden window
-    const winX = w * 0.32;
-    const winY = houseY + 30;
-    ctx.fillStyle = 'rgba(251, 146, 60, 0.25)'; // faint warm glow
-    ctx.fillRect(winX, winY, 60, 75);
-    ctx.strokeStyle = '#020306';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(winX, winY, 60, 75);
-    ctx.beginPath();
-    ctx.moveTo(winX + 30, winY);
-    ctx.lineTo(winX + 30, winY + 75);
-    ctx.moveTo(winX, winY + 38);
-    ctx.lineTo(winX + 60, winY + 38);
-    ctx.stroke();
-
-    // Flickering Porch Lantern
-    const lanternX = w * 0.65;
-    const lanternY = houseY + 35;
-    const flicker = 0.75 + Math.sin(globalT * 9.5) * 0.25;
-
-    const lanternGlow = ctx.createRadialGradient(lanternX, lanternY, 5, lanternX, lanternY, 80);
-    lanternGlow.addColorStop(0, `rgba(249, 115, 22, ${flicker})`);
-    lanternGlow.addColorStop(0.5, `rgba(234, 88, 12, ${flicker * 0.35})`);
-    lanternGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = lanternGlow;
-    ctx.beginPath();
-    ctx.arc(lanternX, lanternY, 80, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#FB923C';
-    ctx.fillRect(lanternX - 6, lanternY - 10, 12, 20);
-
-    // 4. Drifting Volumetric Mist Layers across ground
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
-    for (let layer = 0; layer < 4; layer++) {
-      const mistY = h * 0.68 + layer * 25;
-      const speed = 25 + layer * 15;
-      const offset = (globalT * speed) % (w * 1.5);
-
+      // Distant cold moon
+      const mx = w * 0.76;
+      const my = h * 0.18;
+      const mGlow = ctx.createRadialGradient(mx, my, 10, mx, my, 160);
+      mGlow.addColorStop(0, 'rgba(254, 243, 199, 0.6)');
+      mGlow.addColorStop(0.4, 'rgba(254, 243, 199, 0.15)');
+      mGlow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = mGlow;
       ctx.beginPath();
-      ctx.moveTo(-100, mistY);
-      for (let x = -100; x < w + 100; x += 50) {
-        const my = mistY + Math.sin((x + offset) * 0.015) * 18;
-        ctx.lineTo(x, my);
+      ctx.arc(mx, my, 160, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#FEF3C7';
+      ctx.beginPath();
+      ctx.arc(mx, my, 38, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Distant mountain ridge
+      ctx.fillStyle = '#050711';
+      ctx.beginPath();
+      ctx.moveTo(0, h * 0.45);
+      ctx.bezierCurveTo(w * 0.3, h * 0.38, w * 0.7, h * 0.48, w, h * 0.42);
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      ctx.fill();
+
+      // Village roofs in mist (aerial bird-eye angle)
+      ctx.fillStyle = '#080C1A';
+      for (let r = 0; r < 5; r++) {
+        const rx = w * (0.12 + r * 0.18);
+        const ry = h * (0.55 + (r % 2) * 0.08);
+        ctx.beginPath();
+        ctx.moveTo(rx - 45, ry + 25);
+        ctx.lineTo(rx, ry - 20);
+        ctx.lineTo(rx + 45, ry + 25);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#1E293B';
+        ctx.lineWidth = 2;
+        ctx.stroke();
       }
-      ctx.lineTo(w + 100, h);
-      ctx.lineTo(-100, h);
+
+      // Winding dirt path
+      ctx.strokeStyle = '#0F172A';
+      ctx.lineWidth = 28;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.1, h);
+      ctx.bezierCurveTo(w * 0.35, h * 0.82, w * 0.45, h * 0.72, w * 0.52, h * 0.62);
+      ctx.stroke();
+
+      // Solitary Grand Wooden House at the end of the road
+      const hx = w * 0.52;
+      const hy = h * 0.60;
+      ctx.fillStyle = '#04060C';
+      ctx.fillRect(hx - 60, hy - 30, 120, 65);
+      ctx.beginPath();
+      ctx.moveTo(hx - 80, hy - 25);
+      ctx.lineTo(hx, hy - 75);
+      ctx.lineTo(hx + 80, hy - 25);
+      ctx.closePath();
+      ctx.fill();
+
+      // Volumetric drifting fog
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.15)';
+      for (let i = 0; i < 3; i++) {
+        const fy = h * (0.5 + i * 0.16);
+        const fOffset = (globalT * (20 + i * 15)) % w;
+        ctx.beginPath();
+        ctx.ellipse((w * 0.5 + fOffset) % (w + 200) - 100, fy, 260, 45, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+    } else if (isSwing) {
+      // SCENE 2: The Abandoned Wooden House & Autonomous Creaking Porch Swing
+      ctx.fillStyle = '#050711';
+      ctx.fillRect(0, 0, w, h);
+
+      // Decaying wooden porch beam
+      ctx.fillStyle = '#0D111E';
+      ctx.fillRect(w * 0.08, h * 0.22, w * 0.84, 30);
+      ctx.fillRect(w * 0.15, h * 0.22, 28, h * 0.55);
+      ctx.fillRect(w * 0.82, h * 0.22, 28, h * 0.55);
+
+      // Autonomous swinging swing
+      const swingAngle = Math.sin(globalT * 2.4) * 0.22;
+      const pivotX = w * 0.5;
+      const pivotY = h * 0.25;
+      const ropeLen = h * 0.38;
+
+      ctx.save();
+      ctx.translate(pivotX, pivotY);
+      ctx.rotate(swingAngle);
+
+      // Rusty chains
+      ctx.strokeStyle = '#64748B';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-35, 0);
+      ctx.lineTo(-35, ropeLen);
+      ctx.moveTo(35, 0);
+      ctx.lineTo(35, ropeLen);
+      ctx.stroke();
+
+      // Wooden swing seat
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(-50, ropeLen, 100, 14);
+      ctx.restore();
+
+      // Overgrown dead tree vines
+      ctx.strokeStyle = '#090D18';
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(0, h * 0.15);
+      ctx.bezierCurveTo(w * 0.18, h * 0.35, w * 0.05, h * 0.55, w * 0.2, h * 0.7);
+      ctx.stroke();
+
+      // Rotted porch floorboards with ground mist
+      ctx.fillStyle = '#070A14';
+      ctx.fillRect(0, h * 0.75, w, h * 0.25);
+
+      ctx.fillStyle = 'rgba(203, 213, 225, 0.10)';
+      ctx.beginPath();
+      ctx.ellipse(w * 0.5, h * 0.85, w * 0.65, 55, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (isClockAltar) {
+      // SCENE 3: Grandfather Clock Striking 00:00 & Ancestral Altar Oil Lamp Bursting into Flame
+      ctx.fillStyle = '#030408';
+      ctx.fillRect(0, 0, w, h);
+
+      // 1. Antique Grandfather Pendulum Clock on Left
+      const clockX = w * 0.25;
+      const clockY = h * 0.28;
+      ctx.fillStyle = '#1C1917';
+      ctx.fillRect(clockX - 55, clockY, 110, h * 0.52);
+      ctx.strokeStyle = '#78350F';
+      ctx.lineWidth = 5;
+      ctx.strokeRect(clockX - 55, clockY, 110, h * 0.52);
+
+      // Clock face
+      ctx.fillStyle = '#FEF3C7';
+      ctx.beginPath();
+      ctx.arc(clockX, clockY + 60, 42, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#1C1917';
+      ctx.lineWidth = 3;
+      // Hands exactly pointing to 12:00
+      ctx.beginPath();
+      ctx.moveTo(clockX, clockY + 60);
+      ctx.lineTo(clockX, clockY + 28);
+      ctx.moveTo(clockX, clockY + 60);
+      ctx.lineTo(clockX, clockY + 34);
+      ctx.stroke();
+
+      // Pendulum swinging
+      const pendAngle = Math.sin(globalT * 3.6) * 0.25;
+      ctx.save();
+      ctx.translate(clockX, clockY + 110);
+      ctx.rotate(pendAngle);
+      ctx.strokeStyle = '#D97706';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, 110);
+      ctx.stroke();
+      ctx.fillStyle = '#F59E0B';
+      ctx.beginPath();
+      ctx.arc(0, 110, 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // 2. Ancestral Altar on Right
+      const altarX = w * 0.72;
+      const altarY = h * 0.50;
+      ctx.fillStyle = '#450A0A'; // Deep antique mahogany red
+      ctx.fillRect(altarX - 110, altarY, 220, 24);
+      ctx.fillRect(altarX - 95, altarY + 24, 190, 80);
+
+      // Brass candlesticks
+      ctx.fillStyle = '#B45309';
+      ctx.fillRect(altarX - 85, altarY - 50, 14, 50);
+      ctx.fillRect(altarX + 71, altarY - 50, 14, 50);
+
+      // Oil Lamp (Đèn Dầu) in Center of Altar
+      const lampX = altarX;
+      const lampY = altarY - 25;
+      ctx.fillStyle = '#D97706';
+      ctx.beginPath();
+      ctx.arc(lampX, lampY, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Violent Burst of Flame & Radiant Glow (00:00 trigger)
+      const flameFlicker = 1.0 + Math.sin(globalT * 15) * 0.25;
+      const flameGrad = ctx.createRadialGradient(lampX, lampY - 45, 5, lampX, lampY - 45, 120 * flameFlicker);
+      flameGrad.addColorStop(0, 'rgba(255, 87, 34, 0.95)');
+      flameGrad.addColorStop(0.3, 'rgba(251, 191, 36, 0.7)');
+      flameGrad.addColorStop(0.7, 'rgba(234, 88, 12, 0.25)');
+      flameGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = flameGrad;
+      ctx.beginPath();
+      ctx.arc(lampX, lampY - 45, 120 * flameFlicker, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Teardrop flame shape
+      ctx.fillStyle = '#FFFBEB';
+      ctx.beginPath();
+      ctx.moveTo(lampX, lampY - 70 * flameFlicker);
+      ctx.bezierCurveTo(lampX - 22, lampY - 30, lampX - 15, lampY - 5, lampX, lampY - 5);
+      ctx.bezierCurveTo(lampX + 15, lampY - 5, lampX + 22, lampY - 30, lampX, lampY - 70 * flameFlicker);
+      ctx.fill();
+
+    } else if (isFootprints) {
+      // SCENE 4: Low-Angle Tracking Shot along Wooden Floorboards & Glowing Wet Footprints
+      ctx.fillStyle = '#060813';
+      ctx.fillRect(0, 0, w, h);
+
+      // Perspective floorboards converging into hallway distance
+      const vanishingX = w * 0.5;
+      const vanishingY = h * 0.25;
+      ctx.strokeStyle = '#1E293B';
+      ctx.lineWidth = 3;
+      for (let f = -5; f <= 5; f++) {
+        ctx.beginPath();
+        ctx.moveTo(vanishingX, vanishingY);
+        ctx.lineTo(w * 0.5 + f * (w * 0.22), h);
+        ctx.stroke();
+      }
+
+      // Horizontal plank joints
+      for (let j = 1; j <= 8; j++) {
+        const py = vanishingY + Math.pow(j / 8, 2.2) * (h - vanishingY);
+        ctx.beginPath();
+        ctx.moveTo(0, py);
+        ctx.lineTo(w, py);
+        ctx.stroke();
+      }
+
+      // Wet footprint sequence stepping closer over time
+      const footCount = 6;
+      for (let fp = 0; fp < footCount; fp++) {
+        const fpProg = fp / footCount;
+        const fy = vanishingY + Math.pow(fpProg, 1.8) * (h * 0.65);
+        const fx = vanishingX + (fp % 2 === 0 ? -1 : 1) * (30 + fpProg * 75);
+        const scale = 0.4 + fpProg * 1.1;
+
+        // Footprint opacity based on sequence
+        const alpha = Math.min(0.85, Math.max(0.08, 1.0 - (globalT * 0.8 - fp * 0.5) % 2.5));
+        ctx.fillStyle = `rgba(56, 189, 248, ${alpha * 0.65})`;
+        ctx.save();
+        ctx.translate(fx, fy);
+        ctx.scale(scale, scale);
+        // Sole
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 16, 28, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Heel
+        ctx.beginPath();
+        ctx.ellipse(0, 26, 12, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Ominous silhouette in background
+      ctx.fillStyle = '#020306';
+      ctx.fillRect(vanishingX - 22, vanishingY - 70, 44, 75);
+      ctx.beginPath();
+      ctx.arc(vanishingX, vanishingY - 80, 16, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (isMinhFlashlight) {
+      // SCENE 5: Minh Holding Flashlight in Dense Fog & Camcorder [REC] HUD
+      ctx.fillStyle = '#03050C';
+      ctx.fillRect(0, 0, w, h);
+
+      // Character Minh from behind
+      const charX = w * 0.32;
+      const charY = h * 0.72;
+      ctx.fillStyle = '#1E293B'; // Jacket
+      ctx.beginPath();
+      ctx.ellipse(charX, charY, 70, 110, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#0F172A'; // Head
+      ctx.beginPath();
+      ctx.arc(charX, charY - 110, 42, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Hand holding flashlight
+      const flashX = charX + 65;
+      const flashY = charY - 25;
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(flashX - 15, flashY - 8, 30, 16);
+
+      // Volumetric Flashlight Beam cutting through fog
+      const beamGrad = ctx.createRadialGradient(flashX, flashY, 5, flashX + 300, flashY, 650);
+      beamGrad.addColorStop(0, 'rgba(254, 240, 138, 0.95)');
+      beamGrad.addColorStop(0.25, 'rgba(250, 204, 21, 0.45)');
+      beamGrad.addColorStop(0.7, 'rgba(56, 189, 248, 0.15)');
+      beamGrad.addColorStop(1, 'rgba(0,0,0,0)');
+
+      ctx.fillStyle = beamGrad;
+      ctx.beginPath();
+      ctx.moveTo(flashX, flashY);
+      ctx.lineTo(w + 100, flashY - 260);
+      ctx.lineTo(w + 100, flashY + 320);
+      ctx.closePath();
+      ctx.fill();
+
+      // Camcorder HUD Overlay [REC]
+      ctx.fillStyle = '#EF4444';
+      ctx.beginPath();
+      ctx.arc(45, 45, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 16px monospace';
+      ctx.fillText('REC ● 00:04:12', 65, 50);
+      ctx.fillText('BAT: 85% [■■■□]', w - 160, 50);
+
+      // Rule of thirds grid lines
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.33, 0); ctx.lineTo(w * 0.33, h);
+      ctx.moveTo(w * 0.66, 0); ctx.lineTo(w * 0.66, h);
+      ctx.moveTo(0, h * 0.33); ctx.lineTo(w, h * 0.33);
+      ctx.moveTo(0, h * 0.66); ctx.lineTo(w, h * 0.66);
+      ctx.stroke();
+
+    } else if (isDoorOpen) {
+      // SCENE 6: Wooden Door Creaking Open & Dusty Room with Tilted Frames
+      ctx.fillStyle = '#03050B';
+      ctx.fillRect(0, 0, w, h);
+
+      // Doorframe
+      const dfX = w * 0.28;
+      const dfY = h * 0.20;
+      const dfW = w * 0.50;
+      const dfH = h * 0.65;
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 12;
+      ctx.strokeRect(dfX, dfY, dfW, dfH);
+
+      // Door open angle
+      const doorOpen = Math.min(1.0, localT * 1.6);
+      ctx.fillStyle = '#0F172A';
+      ctx.beginPath();
+      ctx.moveTo(dfX, dfY);
+      ctx.lineTo(dfX + dfW * (1.0 - doorOpen * 0.65), dfY + 40 * doorOpen);
+      ctx.lineTo(dfX + dfW * (1.0 - doorOpen * 0.65), dfY + dfH - 20 * doorOpen);
+      ctx.lineTo(dfX, dfY + dfH);
+      ctx.closePath();
+      ctx.fill();
+
+      // Interior dark room revealed with tilted picture frame
+      ctx.save();
+      ctx.translate(dfX + dfW * 0.5, dfY + dfH * 0.35);
+      ctx.rotate(-0.16);
+      ctx.fillStyle = '#78350F';
+      ctx.fillRect(-45, -55, 90, 110);
+      ctx.fillStyle = '#FEF3C7';
+      ctx.fillRect(-38, -48, 76, 96);
+      ctx.restore();
+
+      // Floating illuminated dust motes
+      ctx.fillStyle = 'rgba(254, 240, 138, 0.7)';
+      for (let m = 0; m < 30; m++) {
+        const dx = (m * 47 + globalT * 12) % w;
+        const dy = (m * 73 + globalT * 8) % h;
+        ctx.beginPath();
+        ctx.arc(dx, dy, (m % 3) + 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+    } else if (isFamilyPhoto) {
+      // SCENE 7: Extreme Close-Up of Scratched Family Portrait
+      ctx.fillStyle = '#050404';
+      ctx.fillRect(0, 0, w, h);
+
+      // Oval antique picture frame
+      const cx = w * 0.5;
+      const cy = h * 0.50;
+      const frameR = Math.min(w, h) * 0.38;
+
+      ctx.strokeStyle = '#78350F';
+      ctx.lineWidth = 22;
+      ctx.beginPath();
+      ctx.arc(cx, cy, frameR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Sepia photograph background
+      ctx.fillStyle = '#D6C7A1';
+      ctx.beginPath();
+      ctx.arc(cx, cy, frameR - 11, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Three family silhouettes in photo (Father, Mother, Little Girl)
+      ctx.fillStyle = '#3F2D20';
+      // Father
+      ctx.beginPath();
+      ctx.ellipse(cx - 75, cy - 20, 32, 50, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Mother
+      ctx.beginPath();
+      ctx.ellipse(cx + 75, cy - 10, 30, 48, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Little Girl in center foreground
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + 35, 26, 42, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // VIOLENT CLAW SCRATCH MARKS GOUGING THE GIRL'S FACE
+      ctx.strokeStyle = '#180202';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(cx - 32, cy + 12);
+      ctx.lineTo(cx + 34, cy + 62);
+      ctx.moveTo(cx - 24, cy + 6);
+      ctx.lineTo(cx + 28, cy + 58);
+      ctx.moveTo(cx - 15, cy + 2);
+      ctx.lineTo(cx + 38, cy + 50);
+      ctx.moveTo(cx + 28, cy + 10);
+      ctx.lineTo(cx - 30, cy + 55);
+      ctx.stroke();
+
+    } else if (isWhisperShadow) {
+      // SCENE 8: Dying Flashlight & Shadows Gathering Behind Minh
+      ctx.fillStyle = '#020306';
+      ctx.fillRect(0, 0, w, h);
+
+      const cx = w * 0.5;
+      const cy = h * 0.65;
+
+      // Flashlight dying stutter
+      const strob = Math.random() > 0.35 ? 0.8 : 0.08;
+      const dyingBeam = ctx.createRadialGradient(cx, cy - 120, 10, cx, cy - 120, 280);
+      dyingBeam.addColorStop(0, `rgba(254, 240, 138, ${strob})`);
+      dyingBeam.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = dyingBeam;
+      ctx.beginPath();
+      ctx.arc(cx, cy - 120, 280, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Minh head from behind looking nervous
+      ctx.fillStyle = '#090D1A';
+      ctx.beginPath();
+      ctx.arc(cx, cy - 60, 52, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Whisper soundwaves emitting behind his neck
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+      ctx.lineWidth = 2.5;
+      for (let s = 1; s <= 4; s++) {
+        const sr = (globalT * 40 + s * 30) % 140;
+        ctx.beginPath();
+        ctx.arc(cx, cy - 70, sr, Math.PI * 0.7, Math.PI * 1.3);
+        ctx.stroke();
+      }
+
+    } else if (isLockedDoor) {
+      // SCENE 9: Locked Under-Stair Door with Deep Claw Marks from Inside
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(0, 0, w, h);
+
+      // Diagonal wooden stairs overhead
+      ctx.fillStyle = '#0F172A';
+      ctx.beginPath();
+      ctx.moveTo(0, h * 0.15);
+      ctx.lineTo(w, h * 0.55);
+      ctx.lineTo(w, 0);
+      ctx.lineTo(0, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      // Small wooden door under stairs
+      const drX = w * 0.22;
+      const drY = h * 0.42;
+      const drW = w * 0.56;
+      const drH = h * 0.48;
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(drX, drY, drW, drH);
+      ctx.strokeStyle = '#020617';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(drX, drY, drW, drH);
+
+      // Deep Claw Marks gouging outward through wood
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 4.5;
+      for (let c = 0; c < 8; c++) {
+        const sx = drX + 35 + c * 25;
+        const sy = drY + 60 + (c % 3) * 25;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx + 15, sy + 75);
+        ctx.stroke();
+      }
+
+      // Rusted iron padlock on floor
+      ctx.fillStyle = '#78350F';
+      ctx.fillRect(drX + drW * 0.45, h * 0.88, 28, 24);
+      ctx.strokeStyle = '#451A03';
+      ctx.strokeRect(drX + drW * 0.45, h * 0.88, 28, 24);
+
+    } else if (isDiary) {
+      // SCENE 10: 50-Year-Old Yellowed Diary with Cursive Handwriting
+      ctx.fillStyle = '#070503';
+      ctx.fillRect(0, 0, w, h);
+
+      // Wooden desk
+      ctx.fillStyle = '#1C1917';
+      ctx.fillRect(0, 0, w, h);
+
+      // Open Diary (leather book binding)
+      const bW = w * 0.78;
+      const bH = h * 0.58;
+      const bX = (w - bW) / 2;
+      const bY = h * 0.22;
+
+      ctx.fillStyle = '#451A03';
+      ctx.fillRect(bX - 10, bY - 8, bW + 20, bH + 16);
+
+      // Yellowed aged pages
+      ctx.fillStyle = '#FEF3C7';
+      ctx.fillRect(bX, bY, bW, bH);
+      ctx.strokeStyle = '#D97706';
+      ctx.lineWidth = 2;
+      // Center spine seam
+      ctx.beginPath();
+      ctx.moveTo(bX + bW / 2, bY);
+      ctx.lineTo(bX + bW / 2, bY + bH);
+      ctx.stroke();
+
+      // Cursive ink handwriting on page
+      ctx.fillStyle = '#451A03';
+      ctx.font = 'italic 16px "Times New Roman", serif';
+      ctx.fillText('Ngày 17 tháng 10...', bX + 25, bY + 50);
+      ctx.fillText('Con gái tôi vẫn ở trong phòng.', bX + 25, bY + 85);
+      ctx.fillText('Tôi đã khóa cửa lại.', bX + 25, bY + 120);
+      ctx.fillText('Đêm nào nó cũng khóc than...', bX + 25, bY + 155);
+      ctx.fillStyle = '#B91C1C';
+      ctx.fillText('Người chết không phải nó!', bX + 25, bY + 195);
+
+    } else if (isFlashback) {
+      // SCENE 11: Dutch Angle Dramatic Flashback Montage
+      ctx.save();
+      ctx.translate(w * 0.5, h * 0.5);
+      ctx.rotate(-0.14); // Dutch angle tilt
+      ctx.translate(-w * 0.5, -h * 0.5);
+
+      ctx.fillStyle = '#1A0505'; // Blood red dark tone
+      ctx.fillRect(-100, -100, w + 200, h + 200);
+
+      // Shutter lines
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.lineWidth = 4;
+      for (let y = 0; y < h; y += 12) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Man slamming door silhouette
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(w * 0.42, h * 0.3, 140, 280);
+      // Weeping mother silhouette on knees
+      ctx.beginPath();
+      ctx.ellipse(w * 0.25, h * 0.72, 45, 35, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+
+    } else if (isWhiteWoman) {
+      // SCENE 12: Woman in White with Long Black Hair at End of Corridor
+      ctx.fillStyle = '#02040A';
+      ctx.fillRect(0, 0, w, h);
+
+      // Perspective Corridor lines
+      const cx = w * 0.5;
+      const cy = h * 0.38;
+      ctx.strokeStyle = '#1E293B';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy); ctx.lineTo(0, 0);
+      ctx.moveTo(cx, cy); ctx.lineTo(w, 0);
+      ctx.moveTo(cx, cy); ctx.lineTo(0, h);
+      ctx.moveTo(cx, cy); ctx.lineTo(w, h);
+      ctx.stroke();
+
+      // Apparition of Woman in White Dress
+      ctx.fillStyle = '#F8FAFC'; // White flowing gown
+      ctx.beginPath();
+      ctx.moveTo(cx - 24, cy - 20);
+      ctx.lineTo(cx + 24, cy - 20);
+      ctx.lineTo(cx + 42, cy + 120);
+      ctx.lineTo(cx - 42, cy + 120);
+      ctx.closePath();
+      ctx.fill();
+
+      // Long Jet-Black Hair completely covering face
+      ctx.fillStyle = '#020617';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy - 45, 22, 35, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(cx - 20, cy - 40, 40, 65); // Hair hangs down past shoulders
+
+      // Spectral cyan glow
+      const ghostGlow = ctx.createRadialGradient(cx, cy + 40, 10, cx, cy + 40, 160);
+      ghostGlow.addColorStop(0, 'rgba(56, 189, 248, 0.45)');
+      ghostGlow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = ghostGlow;
+      ctx.beginPath();
+      ctx.arc(cx, cy + 40, 160, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (isChase) {
+      // SCENE 13: Frantic Chase through Endless Slamming Doors
+      const shakeX = (Math.sin(globalT * 35) + Math.cos(globalT * 42)) * 6;
+      const shakeY = (Math.cos(globalT * 38)) * 4;
+
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
+
+      ctx.fillStyle = '#0A0505';
+      ctx.fillRect(-20, -20, w + 40, h + 40);
+
+      // Radial speed blur lines
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.28)';
+      ctx.lineWidth = 2.5;
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+        ctx.beginPath();
+        ctx.moveTo(w * 0.5, h * 0.5);
+        ctx.lineTo(w * 0.5 + Math.cos(a) * w, h * 0.5 + Math.sin(a) * h);
+        ctx.stroke();
+      }
+
+      // Slamming Door Frames on sides
+      ctx.fillStyle = '#1C1917';
+      ctx.fillRect(0, h * 0.2, 70, h * 0.65);
+      ctx.fillRect(w - 70, h * 0.2, 70, h * 0.65);
+
+      ctx.restore();
+
+    } else if (isMirror) {
+      // SCENE 14: Mirror Reflection Reveal with Bruised Little Girl Behind Minh
+      ctx.fillStyle = '#030408';
+      ctx.fillRect(0, 0, w, h);
+
+      // Ornate oval mirror
+      const mx = w * 0.5;
+      const my = h * 0.48;
+      const mrX = w * 0.36;
+      const mrY = h * 0.32;
+
+      ctx.strokeStyle = '#78350F';
+      ctx.lineWidth = 18;
+      ctx.beginPath();
+      ctx.ellipse(mx, my, mrX, mrY, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Mirror surface reflection
+      ctx.fillStyle = '#0F172A';
+      ctx.beginPath();
+      ctx.ellipse(mx, my, mrX - 9, mrY - 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Minh in mirror reflection (foreground left)
+      ctx.fillStyle = '#E2E8F0';
+      ctx.beginPath();
+      ctx.arc(mx - 45, my + 40, 48, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pale bruised Ghost Girl looming right over his shoulder
+      const gx = mx + 38;
+      const gy = my - 15;
+      ctx.fillStyle = '#94A3B8'; // Pale cyan-grey flesh
+      ctx.beginPath();
+      ctx.arc(gx, gy, 42, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Sunken bruised eyes
+      ctx.fillStyle = '#0F172A';
+      ctx.beginPath();
+      ctx.ellipse(gx - 14, gy, 8, 11, 0, 0, Math.PI * 2);
+      ctx.ellipse(gx + 14, gy, 8, 11, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bruise marks
+      ctx.fillStyle = 'rgba(88, 28, 135, 0.55)';
+      ctx.beginPath();
+      ctx.ellipse(gx - 20, gy + 15, 12, 8, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (isTwist) {
+      // SCENE 15: The Plot Twist — Photograph Inscription "Con gái yêu - Minh"
+      ctx.fillStyle = '#080303';
+      ctx.fillRect(0, 0, w, h);
+
+      // Back of vintage photograph card
+      const cW = w * 0.82;
+      const cH = h * 0.52;
+      const cX = (w - cW) / 2;
+      const cY = h * 0.24;
+
+      ctx.fillStyle = '#D6C7A1';
+      ctx.fillRect(cX, cY, cW, cH);
+      ctx.strokeStyle = '#574130';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(cX, cY, cW, cH);
+
+      // Shockwave ring on reveal
+      const ringR = (globalT * 90) % (w * 0.8);
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(w * 0.5, h * 0.5, ringR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Handwritten cursive twist text
+      ctx.fillStyle = '#1C1917';
+      ctx.font = 'bold 28px "Times New Roman", serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('“Con gái yêu – Minh”', w * 0.5, cY + cH * 0.45);
+      ctx.font = 'italic 18px "Times New Roman", serif';
+      ctx.fillText('1974', w * 0.5, cY + cH * 0.62);
+      ctx.textAlign = 'left';
+
+    } else if (isMorning) {
+      // SCENE 16: Silent Morning After & Smiling Portrait on the Altar
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
+      skyGrad.addColorStop(0, '#0F172A');
+      skyGrad.addColorStop(0.5, '#334155');
+      skyGrad.addColorStop(1, '#64748B');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Cool morning window slats / God rays
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      for (let b = 0; b < 6; b++) {
+        ctx.beginPath();
+        ctx.moveTo(w * 0.1, 0);
+        ctx.lineTo(w * 0.35, 0);
+        ctx.lineTo(w * 0.9, h);
+        ctx.lineTo(w * 0.65, h);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Wooden Altar with New Framed Portrait
+      const ax = w * 0.5;
+      const ay = h * 0.55;
+      ctx.fillStyle = '#1E1B18';
+      ctx.fillRect(ax - 130, ay, 260, 30);
+      ctx.fillRect(ax - 110, ay + 30, 220, 90);
+
+      // The new framed photo: Minh smiling beside the girl
+      ctx.fillStyle = '#78350F';
+      ctx.fillRect(ax - 55, ay - 90, 110, 85);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(ax - 48, ay - 83, 96, 71);
+
+      // Thin spiral of incense smoke
+      ctx.strokeStyle = 'rgba(241, 245, 249, 0.45)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      for (let y = 0; y < 140; y += 10) {
+        const sx = ax + Math.sin(globalT * 3 + y * 0.1) * 12;
+        ctx.lineTo(sx, ay - y);
+      }
+      ctx.stroke();
+
+    } else {
+      // General Atmospheric Fallback
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
+      skyGrad.addColorStop(0, '#04040A');
+      skyGrad.addColorStop(0.65, '#0B0D18');
+      skyGrad.addColorStop(1, '#020306');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Full Moon with Halo
+      const moonX = w * 0.72;
+      const moonY = h * 0.20;
+      const moonR = Math.min(w, h) * 0.10;
+
+      const halo = ctx.createRadialGradient(moonX, moonY, moonR * 0.8, moonX, moonY, moonR * 2.8);
+      halo.addColorStop(0, 'rgba(254, 243, 199, 0.45)');
+      halo.addColorStop(0.5, 'rgba(254, 243, 199, 0.12)');
+      halo.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, moonR * 2.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#FEF3C7';
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ancient Wooden House Silhouette
+      const houseY = h * 0.52;
+      ctx.fillStyle = '#06070D';
+      ctx.fillRect(w * 0.15, houseY, w * 0.70, h * 0.28);
+      ctx.beginPath();
+      ctx.moveTo(w * 0.08, houseY + 15);
+      ctx.lineTo(w * 0.50, houseY - 90);
+      ctx.lineTo(w * 0.92, houseY + 15);
       ctx.closePath();
       ctx.fill();
     }

@@ -1,6 +1,6 @@
 import re
 import math
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Dict, Any
 from backend.providers.ai_base import (
     AIScriptProvider, ScriptAnalysisResult, ScenePlan, ChapterPlan,
     ResearchEntity, SoundDesignCue
@@ -212,6 +212,98 @@ class RuleBasedScriptProvider(AIScriptProvider):
             cues.append(SoundDesignCue(sfx_type="ambience", description="Nhạc nền ambient điện ảnh cân bằng", volume=0.25))
         return cues
 
+    def _parse_structured_screenplay(self, script_text: str) -> Tuple[Optional[str], Optional[str], List[dict]]:
+        """
+        Parses structured screenplay blocks:
+        PHÂN CẢNH 1 – TÊN CẢNH
+        Hình ảnh: ...
+        Camera: ...
+        Âm thanh: ...
+        Lời dẫn: ...
+        """
+        scene_pattern = re.compile(r'^\s*(?:PHÂN CẢNH|CẢNH|SCENE)\s+(\d+)[\s:–—]*(.*?)$', re.MULTILINE | re.IGNORECASE)
+        matches = list(scene_pattern.finditer(script_text))
+        if not matches:
+            return None, None, []
+
+        # Extract title if present
+        title = None
+        for line in script_text.split('\n')[:8]:
+            line_str = line.strip()
+            if line_str.startswith('🎬'):
+                title = line_str.replace('🎬', '').strip()
+                break
+            elif 'căn nhà' in line_str.lower() or 'chiến thắng' in line_str.lower():
+                title = line_str.strip(' –—:-#*')
+                break
+
+        # Extract genre if present
+        detected_genre = None
+        genre_match = re.search(r'Thể loại:\s*([^\n]+)', script_text, re.IGNORECASE)
+        if genre_match:
+            g_str = genre_match.group(1).lower()
+            if any(k in g_str for k in ['kinh dị', 'horror', 'tâm linh', 'ma']):
+                detected_genre = 'horror'
+            elif any(k in g_str for k in ['lịch sử', 'historical', 'chiến dịch']):
+                detected_genre = 'historical_doc'
+            elif any(k in g_str for k in ['kinh tế', 'economics', 'tài chính']):
+                detected_genre = 'economics'
+            elif any(k in g_str for k in ['y học', 'giải phẫu', 'tim', 'cơ quan']):
+                detected_genre = 'science'
+
+        header_re = re.compile(r'^\s*(?:Hình ảnh|Camera|Âm thanh|Lời dẫn|Giọng nữ thì thầm|Giọng đọc nhật ký|Thoại|Kết thúc[^\n]*)\s*:', re.MULTILINE | re.IGNORECASE)
+        parsed_scenes = []
+
+        for i, m in enumerate(matches):
+            num = int(m.group(1))
+            scene_title = m.group(2).strip(' –—:-')
+            start_idx = m.end()
+            end_idx = matches[i + 1].start() if i + 1 < len(matches) else len(script_text)
+            block = script_text[start_idx:end_idx].strip()
+
+            footer_pos = block.find('🎧')
+            if footer_pos != -1:
+                block = block[:footer_pos].strip()
+
+            splits = []
+            last_pos = 0
+            last_header = None
+            for hm in header_re.finditer(block):
+                if last_header:
+                    splits.append((last_header.lower(), block[last_pos:hm.start()].strip()))
+                last_header = hm.group(0).strip(': \t\n')
+                last_pos = hm.end()
+            if last_header:
+                splits.append((last_header.lower(), block[last_pos:].strip()))
+
+            visual = ''
+            camera = ''
+            sound = ''
+            narration_list = []
+            for h, c in splits:
+                if 'hình ảnh' in h:
+                    visual = c
+                elif 'camera' in h:
+                    camera = c
+                elif 'âm thanh' in h:
+                    sound = c
+                elif any(k in h for k in ['lời dẫn', 'giọng', 'thoại', 'kết thúc']):
+                    clean_c = re.sub(r'^[“\"\'‘]+|[”\"\'’]+$', '', c).strip()
+                    if clean_c:
+                        narration_list.append(clean_c)
+
+            narration = ' '.join(narration_list) if narration_list else scene_title
+            parsed_scenes.append({
+                'order': num,
+                'title': scene_title,
+                'visual': visual,
+                'camera': camera,
+                'sound': sound,
+                'narration': narration
+            })
+
+        return title, detected_genre, parsed_scenes
+
     async def analyze_script(
         self,
         script_text: str,
@@ -220,18 +312,12 @@ class RuleBasedScriptProvider(AIScriptProvider):
         video_format: str = "short-form",
         visual_style: str = "adaptive"
     ) -> ScriptAnalysisResult:
+        # Check if user provided a structured screenplay (PHÂN CẢNH 1, 2...)
+        parsed_title, detected_genre, structured_scenes = self._parse_structured_screenplay(script_text)
+        if detected_genre:
+            genre = detected_genre
+
         profile = get_genre_profile(genre)
-
-        # 1. Clean and split sentences
-        raw_sentences = [
-            s.strip() for s in re.split(r'(?<!\d)[.!?\n]+(?!\d)', script_text)
-            if len(s.strip()) > 5
-        ]
-        if not raw_sentences:
-            raw_sentences = [script_text.strip() or "Nội dung video thuyết minh tiếng Việt chất lượng cao."]
-
-        total_syllables = sum(count_vietnamese_syllables(s) for s in raw_sentences)
-        syllables_per_sec = profile.syllables_per_second
 
         # Initialize AI Director for semantic intelligence & character consistency
         director = AIDirectorEngine()
@@ -240,70 +326,146 @@ class RuleBasedScriptProvider(AIScriptProvider):
 
         scenes: List[ScenePlan] = []
         stages = profile.narrative_stages
+        syllables_per_sec = profile.syllables_per_second
 
-        # Distribute sentences across narrative stages and direct each scene
-        for idx, sentence in enumerate(raw_sentences):
-            s_count = count_vietnamese_syllables(sentence)
-            calc_dur = max(profile.min_scene_sec, min(profile.max_scene_sec, round(s_count / syllables_per_sec, 1)))
+        if structured_scenes:
+            # Build scenes from structured screenplay blocks
+            for idx, sc_data in enumerate(structured_scenes):
+                narr = sc_data["narration"]
+                s_count = count_vietnamese_syllables(narr)
+                calc_dur = max(4.0, min(15.0, round(s_count / syllables_per_sec, 1)))
 
-            stage_idx = min(idx, len(stages) - 1)
-            scene_type = stages[stage_idx]
+                stage_idx = min(idx, len(stages) - 1)
+                scene_type = stages[stage_idx]
 
-            visual_method, visual_desc, keywords = self._determine_visual_method(
-                sentence, idx, len(raw_sentences), profile
-            )
+                vis_method = "horror" if profile.genre_id == "horror" else "archival"
+                vis_desc = sc_data["visual"] or f"Phân cảnh {sc_data['order']}: {sc_data['title']}"
+                keywords = ["vietnamese folklore gothic horror", "cinematic 3d animation dark", sc_data["title"]]
 
-            sound_cues = self._generate_sound_cues(scene_type, profile)
+                sound_cues = []
+                if sc_data["sound"]:
+                    sound_cues.append(SoundDesignCue(sfx_type="sfx_ambient", description=sc_data["sound"], volume=0.35))
+                else:
+                    sound_cues = self._generate_sound_cues(scene_type, profile)
 
-            # Direct scene production using AI Director Engine
-            directed = director.direct_scene_production(
-                scene_idx=idx + 1,
-                total_scenes=len(raw_sentences),
-                sentence=sentence,
-                semantics=semantics,
-                characters=characters,
-                genre_prof=profile
-            )
+                directed = director.direct_scene_production(
+                    scene_idx=idx + 1,
+                    total_scenes=len(structured_scenes),
+                    sentence=narr,
+                    semantics=semantics,
+                    characters=characters,
+                    genre_prof=profile
+                )
 
-            scenes.append(ScenePlan(
-                scene_id=f"scene_{idx+1:03d}",
-                scene_order=idx + 1,
-                chapter_order=(idx // 4) + 1 if video_format == "long-form" else 1,
-                narrative_purpose=directed.narrative_purpose,
-                scene_type=scene_type,
-                narration_text=sentence,
-                duration_seconds=calc_dur,
-                visual_method=visual_method,
-                visual_description=visual_desc or directed.visual_description,
-                environment=directed.environment,
-                character_descriptions=directed.character_descriptions,
-                character_poses=directed.character_poses,
-                character_poses_actions=directed.character_poses,
-                props=directed.props,
-                camera_angle=directed.camera_angle,
-                camera_movement=directed.camera_movement,
-                camera_direction=directed.camera_direction or profile.camera_style,
-                animation_instructions=directed.animation_instructions,
-                lighting=directed.lighting,
-                color_palette=directed.color_palette,
-                transition=directed.transition or profile.transition_style,
-                transition_type=directed.transition_type or profile.transition_style,
-                music_direction=directed.music_direction,
-                sound_design=sound_cues or directed.sound_design,
-                sound_effects=directed.sound_effects or sound_cues,
-                suggested_asset_keywords=keywords,
-                search_keywords=keywords,
-                preferred_media_type="image",
-                preferred_aspect_ratio="16:9" if video_format == "long-form" else "9:16",
-                source_references=[f"Nguồn tư liệu kiểm chứng cảnh {idx+1}"]
-            ))
+                cam_dir = sc_data["camera"] or directed.camera_direction or profile.camera_style
+
+                scenes.append(ScenePlan(
+                    scene_id=f"scene_{idx+1:03d}",
+                    scene_order=sc_data["order"],
+                    chapter_order=(idx // 4) + 1 if video_format == "long-form" else 1,
+                    narrative_purpose=directed.narrative_purpose,
+                    scene_type=scene_type,
+                    narration_text=narr,
+                    duration_seconds=calc_dur,
+                    visual_method=vis_method,
+                    visual_description=vis_desc,
+                    environment=directed.environment,
+                    character_descriptions=directed.character_descriptions,
+                    character_poses=directed.character_poses,
+                    character_poses_actions=directed.character_poses,
+                    props=directed.props,
+                    camera_angle=directed.camera_angle,
+                    camera_movement=cam_dir,
+                    camera_direction=cam_dir,
+                    animation_instructions=directed.animation_instructions,
+                    lighting=directed.lighting,
+                    color_palette=directed.color_palette,
+                    transition=directed.transition or profile.transition_style,
+                    transition_type=directed.transition_type or profile.transition_style,
+                    music_direction=directed.music_direction,
+                    sound_design=sound_cues,
+                    sound_effects=sound_cues,
+                    suggested_asset_keywords=keywords,
+                    search_keywords=keywords,
+                    preferred_media_type="image",
+                    preferred_aspect_ratio="16:9" if video_format == "long-form" else "9:16",
+                    source_references=[f"Kịch bản chi tiết cảnh {idx+1}: {sc_data['title']}"]
+                ))
+            title = parsed_title or "Căn Nhà Gỗ Cuối Làng"
+        else:
+            # 1. Clean and split sentences
+            raw_sentences = [
+                s.strip() for s in re.split(r'(?<!\d)[.!?\n]+(?!\d)', script_text)
+                if len(s.strip()) > 5
+            ]
+            if not raw_sentences:
+                raw_sentences = [script_text.strip() or "Nội dung video thuyết minh tiếng Việt chất lượng cao."]
+
+            # Distribute sentences across narrative stages and direct each scene
+            for idx, sentence in enumerate(raw_sentences):
+                s_count = count_vietnamese_syllables(sentence)
+                calc_dur = max(profile.min_scene_sec, min(profile.max_scene_sec, round(s_count / syllables_per_sec, 1)))
+
+                stage_idx = min(idx, len(stages) - 1)
+                scene_type = stages[stage_idx]
+
+                visual_method, visual_desc, keywords = self._determine_visual_method(
+                    sentence, idx, len(raw_sentences), profile
+                )
+
+                sound_cues = self._generate_sound_cues(scene_type, profile)
+
+                # Direct scene production using AI Director Engine
+                directed = director.direct_scene_production(
+                    scene_idx=idx + 1,
+                    total_scenes=len(raw_sentences),
+                    sentence=sentence,
+                    semantics=semantics,
+                    characters=characters,
+                    genre_prof=profile
+                )
+
+                scenes.append(ScenePlan(
+                    scene_id=f"scene_{idx+1:03d}",
+                    scene_order=idx + 1,
+                    chapter_order=(idx // 4) + 1 if video_format == "long-form" else 1,
+                    narrative_purpose=directed.narrative_purpose,
+                    scene_type=scene_type,
+                    narration_text=sentence,
+                    duration_seconds=calc_dur,
+                    visual_method=visual_method,
+                    visual_description=visual_desc or directed.visual_description,
+                    environment=directed.environment,
+                    character_descriptions=directed.character_descriptions,
+                    character_poses=directed.character_poses,
+                    character_poses_actions=directed.character_poses,
+                    props=directed.props,
+                    camera_angle=directed.camera_angle,
+                    camera_movement=directed.camera_movement,
+                    camera_direction=directed.camera_direction or profile.camera_style,
+                    animation_instructions=directed.animation_instructions,
+                    lighting=directed.lighting,
+                    color_palette=directed.color_palette,
+                    transition=directed.transition or profile.transition_style,
+                    transition_type=directed.transition_type or profile.transition_style,
+                    music_direction=directed.music_direction,
+                    sound_design=sound_cues or directed.sound_design,
+                    sound_effects=directed.sound_effects or sound_cues,
+                    suggested_asset_keywords=keywords,
+                    search_keywords=keywords,
+                    preferred_media_type="image",
+                    preferred_aspect_ratio="16:9" if video_format == "long-form" else "9:16",
+                    source_references=[f"Nguồn tư liệu kiểm chứng cảnh {idx+1}"]
+                ))
+
+            # Extract title from first sentence
+            first_clean = re.sub(r'[^\w\s]', '', raw_sentences[0])
+            title_words = first_clean.split()[:7]
+            title = " ".join(title_words).capitalize() if title_words else f"Video {profile.display_name}"
 
         total_calc_duration = sum(sc.duration_seconds for sc in scenes)
-
-        # Extract title from first sentence
-        first_clean = re.sub(r'[^\w\s]', '', raw_sentences[0])
-        title_words = first_clean.split()[:7]
-        title = " ".join(title_words).capitalize() if title_words else f"Video {profile.display_name}"
+        total_syllables = sum(count_vietnamese_syllables(sc.narration_text) for sc in scenes)
+        first_summary = scenes[0].narration_text[:120] if scenes else title
 
         # Extract Research Entities
         entities = self._extract_research_entities(script_text)
@@ -330,7 +492,7 @@ class RuleBasedScriptProvider(AIScriptProvider):
             chapters.append(ChapterPlan(
                 chapter_order=1,
                 title=title,
-                summary=raw_sentences[0][:120],
+                summary=first_summary,
                 estimated_duration_seconds=round(total_calc_duration, 1),
                 scene_count=len(scenes),
                 scenes=scenes
@@ -351,7 +513,7 @@ class RuleBasedScriptProvider(AIScriptProvider):
             character_registry=characters,
             estimated_syllables=total_syllables,
             estimated_duration_seconds=round(total_calc_duration, 1),
-            hook_summary=raw_sentences[0][:120],
+            hook_summary=first_summary,
             scenes=scenes,
             chapters=chapters,
             entities=entities,

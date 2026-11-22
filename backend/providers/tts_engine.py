@@ -653,24 +653,36 @@ class TTSService:
             return []
 
         total_ms = int(total_duration_sec * 1000)
-        start_buffer = min(80, total_ms // (len(words) * 2))
-        end_buffer = min(80, total_ms // (len(words) * 2))
-        usable_ms = max(len(words) * 60, total_ms - start_buffer - end_buffer)
+        start_buffer = min(120, max(50, total_ms // (len(words) * 3)))
+        end_buffer = min(120, max(50, total_ms // (len(words) * 3)))
+        usable_ms = max(len(words) * 70, total_ms - start_buffer - end_buffer)
 
-        weights = [1.35 if (w.endswith(('.', '!', '?', ',', ';', ':')) or idx == len(words) - 1) else 1.0 for idx, w in enumerate(words)]
-        total_weight = sum(weights)
+        # Proportional syllable and character phonetic weighting
+        weights = []
+        for idx, w in enumerate(words):
+            clean = re.sub(r'[^\w]', '', w)
+            c_len = max(1, len(clean))
+            # Base weight by phonetic length
+            wt = 0.70 + (c_len * 0.12)
+            if w.endswith(('.', '!', '?', ':', ';')) or idx == len(words) - 1:
+                wt += 0.45
+            elif w.endswith(','):
+                wt += 0.25
+            weights.append(wt)
+
+        total_weight = sum(weights) or 1.0
 
         timings: List[WordTiming] = []
         cur_ms = start_buffer
 
         for idx, w in enumerate(words):
             raw_dur = int((weights[idx] / total_weight) * usable_ms)
-            word_dur = max(40, raw_dur)
+            word_dur = max(60, raw_dur)
             end_ms = cur_ms + word_dur
             if idx == len(words) - 1:
-                end_ms = min(total_ms, max(cur_ms + 40, total_ms - 20))
+                end_ms = min(total_ms, max(cur_ms + 60, total_ms - 20))
             else:
-                end_ms = min(total_ms - (len(words) - 1 - idx) * 40, end_ms)
+                end_ms = min(total_ms - (len(words) - 1 - idx) * 60, end_ms)
 
             clean_word = re.sub(r'[^\w\s-]', '', w)
             timings.append(WordTiming(

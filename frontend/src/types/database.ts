@@ -103,7 +103,7 @@ export interface SceneItem {
   duration_seconds: number;
   start_frame: number;
   end_frame: number;
-  visual_method: 'photo' | 'stock' | 'archival' | 'map' | 'svg' | 'infographic' | 'procedural' | 'parallax' | 'toon' | 'anatomy' | 'schematic' | 'presenter';
+  visual_method: 'photo' | 'stock' | 'archival' | 'map' | 'svg' | 'infographic' | 'procedural' | 'parallax' | 'toon' | 'anatomy' | 'schematic' | 'presenter' | 'horror';
   visual_description?: string;
   environment?: EnvironmentSpec;
   character_descriptions?: string[];

@@ -20,6 +20,7 @@ interface TimelineEditorProps {
 export const VISUAL_METHODS = [
   { id: 'anatomy', label: '🫀 Giải Phẫu & Cơ Quan Nội Tạng (Anatomical Heart/Organs)', icon: '🫀' },
   { id: 'schematic', label: '🔬 Sơ Đồ Nguyên Lý Khoa Học (Technical Blueprint & Radar)', icon: '🔬' },
+  { id: 'horror', label: '👻 Phim Ma & Kinh Dị (Haunted House, Fog & Moon)', icon: '👻' },
   { id: 'presenter', label: '👨‍⚕️ Người Thuyết Minh Chuyên Gia (Doctor/Presenter Lip-Sync)', icon: '👨‍⚕️' },
   { id: 'toon', label: '🎨 Hoạt Họa 2.5D (Articulated Rig & Parallax)', icon: '🎨' },
   { id: 'map', label: '🗺️ Bản Đồ Vector & Tuyến Hành Quân', icon: '🗺️' },
@@ -74,6 +75,13 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({
 
   // Active Tool: 'select' (V) | 'razor' (B)
   const [activeTool, setActiveTool] = useState<'select' | 'razor'>('select');
+
+  // Drag-and-drop scene reordering
+  const [draggingSceneIdx, setDraggingSceneIdx] = useState<number | null>(null);
+  const [dragOverSceneIdx, setDragOverSceneIdx] = useState<number | null>(null);
+
+  // Playhead smooth dragging & scrubbing
+  const [isScrubbingPlayhead, setIsScrubbingPlayhead] = useState(false);
 
   // Interactive Resizing / Trimming State
   const [isTrimming, setIsTrimming] = useState(false);
@@ -230,6 +238,85 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isTrimming, isDraggingSFX, zoomScale, manifest]);
+
+  // Scene Reordering via Drag-and-Drop
+  const handleDropReorder = (targetIdx: number) => {
+    if (draggingSceneIdx === null || draggingSceneIdx === targetIdx) {
+      setDraggingSceneIdx(null);
+      setDragOverSceneIdx(null);
+      return;
+    }
+    const newScenes = [...manifest.scenes];
+    const [movedScene] = newScenes.splice(draggingSceneIdx, 1);
+    newScenes.splice(targetIdx, 0, movedScene);
+
+    const fps = manifest.video_specs?.fps || 30;
+    let currentFrame = 0;
+    const updatedScenes = newScenes.map((s, i) => {
+      const frameCount = Math.round(s.duration_seconds * fps);
+      const sc = {
+        ...s,
+        scene_order: i + 1,
+        start_frame: currentFrame,
+        end_frame: currentFrame + frameCount,
+      };
+      currentFrame += frameCount;
+      return sc;
+    });
+
+    onChange({
+      ...manifest,
+      scenes: updatedScenes,
+    });
+    onSelectScene(targetIdx);
+    setDraggingSceneIdx(null);
+    setDragOverSceneIdx(null);
+  };
+
+  // Continuous Smooth Ruler & Playhead Scrubbing
+  const updatePlayheadFromClientX = (clientX: number) => {
+    if (!timelineContainerRef.current) return;
+    const rect = timelineContainerRef.current.getBoundingClientRect();
+    const scrollLeft = timelineContainerRef.current.scrollLeft;
+    const clickX = clientX - rect.left + scrollLeft - 110;
+    const clampedSec = Math.max(0, Math.min(totalDuration, clickX / zoomScale));
+    onSeekTime?.(clampedSec);
+
+    // Sync active scene
+    for (let i = 0; i < sceneOffsets.length; i++) {
+      if (clampedSec >= sceneOffsets[i].start && clampedSec < sceneOffsets[i].end) {
+        onSelectScene(i);
+        break;
+      }
+    }
+  };
+
+  const handleStartScrubbing = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsScrubbingPlayhead(true);
+    updatePlayheadFromClientX(e.clientX);
+  };
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (isScrubbingPlayhead) {
+        updatePlayheadFromClientX(e.clientX);
+      }
+    };
+    const onMouseUp = () => {
+      if (isScrubbingPlayhead) {
+        setIsScrubbingPlayhead(false);
+      }
+    };
+    if (isScrubbingPlayhead) {
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [isScrubbingPlayhead, totalDuration, zoomScale, sceneOffsets]);
 
   // 2. Razor / Split Tool (Cắt lát clip tại vị trí playhead)
   const handleSplitAtPlayhead = () => {
@@ -585,11 +672,15 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({
       >
         <div style={{ width: `${totalWidth + 140}px` }} className="relative flex flex-col py-1">
           {/* 1. Timecode Ruler */}
-          <div className="h-8 border-b border-gray-800 flex items-center relative pl-[110px] bg-[#0c1222]/80">
+          <div 
+            onMouseDown={handleStartScrubbing}
+            className="h-8 border-b border-gray-800 flex items-center relative pl-[110px] bg-[#0c1222]/80 cursor-ew-resize select-none"
+            title="Kéo chuột trên thanh thước để tua nhanh video từng giây"
+          >
             {rulerTicks.map(t => (
               <div
                 key={t}
-                className="absolute top-0 bottom-0 flex flex-col justify-end"
+                className="absolute top-0 bottom-0 flex flex-col justify-end pointer-events-none"
                 style={{ left: `${110 + t * zoomScale}px` }}
               >
                 <span className="text-[9px] font-mono text-gray-500 -ml-2 mb-1">
@@ -600,13 +691,17 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({
             ))}
           </div>
 
-          {/* Scrubbing Playhead Red Needle */}
+          {/* Scrubbing Playhead Red Needle (Draggable across timeline) */}
           <div
-            className="absolute top-0 bottom-0 w-[2px] bg-red-500 z-40 pointer-events-none transition-all duration-75 shadow-[0_0_10px_rgba(239,68,68,0.9)]"
+            onMouseDown={handleStartScrubbing}
+            className="absolute top-0 bottom-0 w-[2px] bg-red-500 z-40 cursor-ew-resize shadow-[0_0_12px_rgba(239,68,68,1)]"
             style={{ left: `${110 + currentTimeSec * zoomScale}px` }}
           >
-            <div className="w-3.5 h-3.5 bg-red-500 rounded-b -ml-[6px] flex items-center justify-center shadow-md">
-              <div className="w-1.5 h-1.5 bg-white rounded-full" />
+            <div 
+              className="w-4 h-5 bg-red-500 hover:bg-red-400 rounded-b -ml-[7px] flex items-center justify-center shadow-xl cursor-grab active:cursor-grabbing transition"
+              title={`Playhead: ${formatTimecode(currentTimeSec)} (Kéo để tua từng giây)`}
+            >
+              <div className="w-1.5 h-1.5 bg-white rounded-full pointer-events-none" />
             </div>
           </div>
 
@@ -633,15 +728,37 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({
                 const offset = sceneOffsets[idx];
                 const widthPx = Math.max(60, offset.duration * zoomScale);
                 const isSelected = idx === activeSceneIndex;
+                const isDragTarget = dragOverSceneIdx === idx && draggingSceneIdx !== idx;
+                const isBeingDragged = draggingSceneIdx === idx;
                 const methodObj = VISUAL_METHODS.find(m => m.id === scene.visual_method) || VISUAL_METHODS[0];
 
                 return (
                   <div
                     key={idx}
+                    draggable={!isTrimming}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', String(idx));
+                      setDraggingSceneIdx(idx);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dragOverSceneIdx !== idx) setDragOverSceneIdx(idx);
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverSceneIdx === idx) setDragOverSceneIdx(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleDropReorder(idx);
+                    }}
                     onClick={(e) => {
                       e.stopPropagation();
                       onSelectScene(idx);
-                      onSeekTime?.(offset.start);
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const relX = Math.max(0, e.clientX - rect.left);
+                      const inClipSec = relX / zoomScale;
+                      const targetSec = Math.min(offset.end, Math.max(offset.start, offset.start + inClipSec));
+                      onSeekTime?.(targetSec);
                     }}
                     style={{
                       position: 'absolute',
@@ -649,10 +766,15 @@ export const TimelineEditor: React.FC<TimelineEditorProps> = ({
                       width: `${widthPx - 2}px`,
                     }}
                     className={`h-[56px] rounded-xl p-2 flex flex-col justify-between cursor-pointer transition border relative group ${
-                      isSelected
+                      isDragTarget
+                        ? 'border-2 border-amber-400 bg-amber-950/80 ring-4 ring-amber-400/40 shadow-2xl scale-105 z-30'
+                        : isBeingDragged
+                        ? 'opacity-40 border-dashed border-gray-500'
+                        : isSelected
                         ? 'bg-sky-950/90 border-sky-400 ring-2 ring-sky-500/50 shadow-xl z-20'
                         : 'bg-sky-950/40 border-sky-800/60 hover:border-sky-500 hover:bg-sky-950/60'
                     }`}
+                    title="Kéo thả ngang để đổi thứ tự cảnh (Drag to Reorder scenes)"
                   >
                     {/* Left Trim Handle */}
                     <div

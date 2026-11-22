@@ -11,6 +11,364 @@ import {
   Search, ExternalLink, ChevronDown, ChevronUp
 } from 'lucide-react';
 
+const buildDefaultManifestForProject = (
+  title: string,
+  genre: string,
+  videoType: 'short-form' | 'long-form',
+  episodeId: string
+): { manifest: SceneManifest; script: string; topic: string } => {
+  const isLong = videoType === 'long-form';
+  const width = isLong ? 1920 : 1080;
+  const height = isLong ? 1080 : 1920;
+  const aspect_ratio = isLong ? '16:9' : '9:16';
+
+  const g = (genre || '').toLowerCase();
+  const t = (title || '').toLowerCase();
+
+  if (g.includes('horror') || t.includes('ma') || t.includes('kinh dị')) {
+    const script = `Bạn có dám bước chân vào căn nhà gỗ cổ kính ở cuối làng khi màn đêm buông xuống? Cứ đúng mười hai giờ đêm, ngọn đèn dầu trên bàn thờ lại tự bốc cháy lập lòe trong sương mù. Những tiếng bước chân kẽo kẹt vang lên từng hồi trên sàn gỗ mục nát, dẫn lối người tò mò vào một bí mật bị chôn giấu suốt nửa thế kỷ. Đừng bao giờ ngoảnh đầu lại nếu nghe thấy tiếng thì thầm gọi tên mình từ phía sau bóng tối!`;
+    return {
+      topic: title || 'Bí Ẩn Căn Nhà Ma Cuối Làng',
+      script,
+      manifest: {
+        episode_id: episodeId,
+        title: title || 'Bí Ẩn Căn Nhà Ma Cuối Làng',
+        genre: 'horror',
+        video_format: videoType,
+        aspect_ratio,
+        total_duration_sec: 28.0,
+        total_frames: 840,
+        voice_config: { voice: 'vi-VN-NamMinhNeural', rate: '+0%', pitch: '+0Hz' },
+        video_specs: { width, height, fps: 30 },
+        audio_specs: { target_lufs: -14.0, true_peak: -1.0 },
+        scenes: [
+          {
+            scene_order: 1,
+            scene_type: 'hook',
+            narration_text: 'Bạn có dám bước chân vào căn nhà gỗ cổ kính ở cuối làng khi màn đêm buông xuống?',
+            duration_seconds: 6.5,
+            start_frame: 0,
+            end_frame: 195,
+            visual_method: 'horror',
+            camera_direction: 'slow_push_in',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+          {
+            scene_order: 2,
+            scene_type: 'context',
+            narration_text: 'Cứ đúng mười hai giờ đêm, ngọn đèn dầu trên bàn thờ lại tự bốc cháy lập lòe trong sương mù.',
+            duration_seconds: 7.0,
+            start_frame: 195,
+            end_frame: 405,
+            visual_method: 'horror',
+            camera_direction: 'pan_left',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+          {
+            scene_order: 3,
+            scene_type: 'climax',
+            narration_text: 'Những tiếng bước chân kẽo kẹt vang lên từng hồi trên sàn gỗ mục nát, dẫn lối người tò mò vào một bí mật bị chôn giấu suốt nửa thế kỷ.',
+            duration_seconds: 8.5,
+            start_frame: 405,
+            end_frame: 660,
+            visual_method: 'horror',
+            camera_direction: 'push_in',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+          {
+            scene_order: 4,
+            scene_type: 'cta',
+            narration_text: 'Đừng bao giờ ngoảnh đầu lại nếu nghe thấy tiếng thì thầm gọi tên mình từ phía sau bóng tối!',
+            duration_seconds: 6.0,
+            start_frame: 660,
+            end_frame: 840,
+            visual_method: 'horror',
+            camera_direction: 'static',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+        ]
+      }
+    };
+  }
+
+  if (g.includes('anatomy') || t.includes('tim') || t.includes('giải phẫu') || t.includes('nội tạng')) {
+    const script = `Bạn có biết rằng, trung bình mỗi ngày, trái tim con người đập hơn một trăm nghìn lần? Trái tim hoạt động như một cỗ máy bơm sinh học phi thường, co bóp theo chu kỳ nhịp nhàng bảy mươi hai nhịp mỗi phút. Với bốn buồng tim phối hợp chính xác, nó đẩy dòng máu giàu oxy qua quai động mạch chủ đi nuôi dưỡng toàn bộ cơ thể!`;
+    return {
+      topic: title || 'Giải Phẫu Hệ Cơ Quan & Trái Tim Sinh Học',
+      script,
+      manifest: {
+        episode_id: episodeId,
+        title: title || 'Giải Phẫu Hệ Cơ Quan & Trái Tim Sinh Học',
+        genre: 'anatomy',
+        video_format: videoType,
+        aspect_ratio,
+        total_duration_sec: 22.0,
+        total_frames: 660,
+        voice_config: { voice: 'vi-VN-MaiNgocNeural', rate: '+0%', pitch: '+5Hz' },
+        video_specs: { width, height, fps: 30 },
+        audio_specs: { target_lufs: -14.0, true_peak: -1.0 },
+        scenes: [
+          {
+            scene_order: 1,
+            scene_type: 'hook',
+            narration_text: 'Bạn có biết rằng, trung bình mỗi ngày, trái tim con người đập hơn một trăm nghìn lần?',
+            duration_seconds: 6.5,
+            start_frame: 0,
+            end_frame: 195,
+            visual_method: 'anatomy',
+            camera_direction: 'slow_push_in',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+          {
+            scene_order: 2,
+            scene_type: 'body',
+            narration_text: 'Trái tim hoạt động như một cỗ máy bơm sinh học phi thường, co bóp theo chu kỳ nhịp nhàng bảy mươi hai nhịp mỗi phút.',
+            duration_seconds: 8.0,
+            start_frame: 195,
+            end_frame: 435,
+            visual_method: 'anatomy',
+            camera_direction: 'push_in',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+          {
+            scene_order: 3,
+            scene_type: 'resolution',
+            narration_text: 'Với bốn buồng tim phối hợp chính xác, nó đẩy dòng máu giàu oxy qua quai động mạch chủ đi nuôi dưỡng toàn bộ cơ thể!',
+            duration_seconds: 7.5,
+            start_frame: 435,
+            end_frame: 660,
+            visual_method: 'anatomy',
+            camera_direction: 'static',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+        ]
+      }
+    };
+  }
+
+  if (g.includes('economics') || t.includes('kinh tế') || t.includes('tài chính') || t.includes('lạm phát')) {
+    const script = `Nền kinh tế Việt Nam năm 2024 đang ghi nhận những bước chuyển mình mạnh mẽ với mục tiêu tăng trưởng GDP bứt phá. Làn sóng vốn đầu tư trực tiếp nước ngoài FDI đạt kỷ lục mới, cùng sự phục hồi mạnh mẽ của kim ngạch xuất khẩu công nghệ cao. Đây chính là động lực quan trọng đưa Việt Nam vươn lên thành trung tâm sản xuất chiến lược của khu vực!`;
+    return {
+      topic: title || 'Tăng Trưởng Kinh Tế Việt Nam 2024',
+      script,
+      manifest: {
+        episode_id: episodeId,
+        title: title || 'Tăng Trưởng Kinh Tế Việt Nam 2024',
+        genre: 'economics',
+        video_format: videoType,
+        aspect_ratio,
+        total_duration_sec: 24.0,
+        total_frames: 720,
+        voice_config: { voice: 'vi-VN-NamMinhNeural', rate: '+0%', pitch: '+0Hz' },
+        video_specs: { width, height, fps: 30 },
+        audio_specs: { target_lufs: -14.0, true_peak: -1.0 },
+        scenes: [
+          {
+            scene_order: 1,
+            scene_type: 'hook',
+            narration_text: 'Nền kinh tế Việt Nam năm 2024 đang ghi nhận những bước chuyển mình mạnh mẽ với mục tiêu tăng trưởng GDP bứt phá.',
+            duration_seconds: 7.5,
+            start_frame: 0,
+            end_frame: 225,
+            visual_method: 'infographic',
+            camera_direction: 'slow_push_in',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+          {
+            scene_order: 2,
+            scene_type: 'body',
+            narration_text: 'Làn sóng vốn đầu tư trực tiếp nước ngoài FDI đạt kỷ lục mới, cùng sự phục hồi mạnh mẽ của kim ngạch xuất khẩu công nghệ cao.',
+            duration_seconds: 8.5,
+            start_frame: 225,
+            end_frame: 480,
+            visual_method: 'infographic',
+            camera_direction: 'pan_right',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+          {
+            scene_order: 3,
+            scene_type: 'resolution',
+            narration_text: 'Đây chính là động lực quan trọng đưa Việt Nam vươn lên thành trung tâm sản xuất chiến lược của khu vực!',
+            duration_seconds: 8.0,
+            start_frame: 480,
+            end_frame: 720,
+            visual_method: 'infographic',
+            camera_direction: 'pull_out',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+        ]
+      }
+    };
+  }
+
+  if (g.includes('science') || t.includes('cầu') || t.includes('khoa học') || t.includes('vật lý') || t.includes('vũ trụ')) {
+    const script = `Năm 1831, cây cầu treo Broughton tại nước Anh đã bất ngờ đổ sập khi một đoàn quân duyệt binh bước đều qua cầu. Hiện tượng vật lý nào đã gây ra thảm họa này? Đó chính là sự cộng hưởng dao động cơ học. Khi tần số bước chân trùng khớp với tần số dao động tự nhiên của cây cầu, biên độ rung lắc đã tăng vọt ngoài tầm kiểm soát!`;
+    return {
+      topic: title || 'Nguyên Lý Cộng Hưởng Cầu Broughton',
+      script,
+      manifest: {
+        episode_id: episodeId,
+        title: title || 'Nguyên Lý Cộng Hưởng Cầu Broughton',
+        genre: 'science',
+        video_format: videoType,
+        aspect_ratio,
+        total_duration_sec: 25.0,
+        total_frames: 750,
+        voice_config: { voice: 'vi-VN-MaiNgocNeural', rate: '+0%', pitch: '+5Hz' },
+        video_specs: { width, height, fps: 30 },
+        audio_specs: { target_lufs: -14.0, true_peak: -1.0 },
+        scenes: [
+          {
+            scene_order: 1,
+            scene_type: 'hook',
+            narration_text: 'Năm 1831, cây cầu treo Broughton tại nước Anh đã bất ngờ đổ sập khi một đoàn quân duyệt binh bước đều qua cầu.',
+            duration_seconds: 7.5,
+            start_frame: 0,
+            end_frame: 225,
+            visual_method: 'schematic',
+            camera_direction: 'slow_push_in',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+          {
+            scene_order: 2,
+            scene_type: 'body',
+            narration_text: 'Hiện tượng vật lý nào đã gây ra thảm họa này? Đó chính là sự cộng hưởng dao động cơ học.',
+            duration_seconds: 8.0,
+            start_frame: 225,
+            end_frame: 465,
+            visual_method: 'schematic',
+            camera_direction: 'pan_left',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+          {
+            scene_order: 3,
+            scene_type: 'resolution',
+            narration_text: 'Khi tần số bước chân trùng khớp với tần số dao động tự nhiên của cây cầu, biên độ rung lắc đã tăng vọt ngoài tầm kiểm soát!',
+            duration_seconds: 9.5,
+            start_frame: 465,
+            end_frame: 750,
+            visual_method: 'schematic',
+            camera_direction: 'pull_out',
+            visual_config: {},
+            subtitles_json: [],
+            assets: [],
+          },
+        ]
+      }
+    };
+  }
+
+  // Default: Historical Document (Điện Biên Phủ)
+  const defaultScript = `Bạn có biết rằng, cách đây hơn 70 năm, tại một thung lũng lòng chảo ở Tây Bắc, quân và dân Việt Nam đã làm nên một kỳ tích chấn động địa cầu? Đó chính là chiến thắng Điện Biên Phủ lịch sử năm 1954. Dưới sự chỉ huy tài ba của Đại tướng Võ Nguyên Giáp, toàn quân ta đã kiên cường vượt mọi gian khổ, kéo pháo qua đèo cao, bạt núi mở đường để làm nên chiến công hiển hách lừng lẫy năm châu. Ngày 7 tháng 5 năm 1954, lá cờ Quyết chiến Quyết thắng tung bay trên nóc hầm De Castries, đánh dấu mốc son chói lọi trong lịch sử dân tộc! Hãy bấm đăng ký kênh để đón xem những câu chuyện lịch sử tự hào tiếp theo!`;
+  return {
+    topic: title || 'Chiến Thắng Điện Biên Phủ 1954',
+    script: defaultScript,
+    manifest: {
+      episode_id: episodeId,
+      title: title || 'Chiến Thắng Điện Biên Phủ 1954',
+      genre: 'historical_doc',
+      video_format: videoType,
+      aspect_ratio,
+      total_duration_sec: 40.0,
+      total_frames: 1200,
+      voice_config: { voice: 'vi-VN-NamMinhNeural', rate: '+0%', pitch: '+0Hz' },
+      video_specs: { width, height, fps: 30 },
+      audio_specs: { target_lufs: -14.0, true_peak: -1.0 },
+      scenes: [
+        {
+          scene_order: 1,
+          scene_type: 'hook',
+          narration_text: 'Bạn có biết rằng, cách đây hơn 70 năm, tại một thung lũng lòng chảo ở Tây Bắc, quân và dân Việt Nam đã làm nên một kỳ tích chấn động địa cầu?',
+          duration_seconds: 7.5,
+          start_frame: 0,
+          end_frame: 225,
+          visual_method: 'map',
+          camera_direction: 'slow_push_in',
+          visual_config: {},
+          subtitles_json: [],
+          assets: [],
+        },
+        {
+          scene_order: 2,
+          scene_type: 'context',
+          narration_text: 'Đó chính là chiến thắng Điện Biên Phủ lịch sử năm 1954. Dưới sự chỉ huy tài ba của Đại tướng Võ Nguyên Giáp, toàn quân ta đã kiên cường vượt mọi gian khổ.',
+          duration_seconds: 9.0,
+          start_frame: 225,
+          end_frame: 495,
+          visual_method: 'toon',
+          camera_direction: 'pan_left',
+          visual_config: {},
+          subtitles_json: [],
+          assets: [],
+        },
+        {
+          scene_order: 3,
+          scene_type: 'climax',
+          narration_text: 'Toàn quân đã kéo pháo qua đèo cao, bạt núi mở đường để làm nên chiến công hiển hách lừng lẫy năm châu chấn động địa cầu.',
+          duration_seconds: 8.5,
+          start_frame: 495,
+          end_frame: 750,
+          visual_method: 'toon',
+          camera_direction: 'push_in',
+          visual_config: {},
+          subtitles_json: [],
+          assets: [],
+        },
+        {
+          scene_order: 4,
+          scene_type: 'resolution',
+          narration_text: 'Ngày 7 tháng 5 năm 1954, lá cờ Quyết chiến Quyết thắng tung bay trên nóc hầm De Castries, đánh dấu mốc son chói lọi trong lịch sử dân tộc!',
+          duration_seconds: 9.5,
+          start_frame: 750,
+          end_frame: 1035,
+          visual_method: 'toon',
+          camera_direction: 'pull_out',
+          visual_config: {},
+          subtitles_json: [],
+          assets: [],
+        },
+        {
+          scene_order: 5,
+          scene_type: 'cta',
+          narration_text: 'Hãy bấm đăng ký kênh để đón xem những câu chuyện lịch sử tự hào tiếp theo!',
+          duration_seconds: 5.5,
+          start_frame: 1035,
+          end_frame: 1200,
+          visual_method: 'toon',
+          camera_direction: 'static',
+          visual_config: {},
+          subtitles_json: [],
+          assets: [],
+        },
+      ]
+    }
+  };
+};
+
 const DEFAULT_SCRIPT = `Bạn có biết rằng, cách đây hơn 70 năm, tại một thung lũng lòng chảo ở Tây Bắc, quân và dân Việt Nam đã làm nên một kỳ tích chấn động địa cầu? Đó chính là chiến thắng Điện Biên Phủ lịch sử năm 1954. Dưới sự chỉ huy tài ba của Đại tướng Võ Nguyên Giáp, toàn quân ta đã kiên cường vượt mọi gian khổ, kéo pháo qua đèo cao, bạt núi mở đường để làm nên chiến công hiển hách lừng lẫy năm châu. Ngày 7 tháng 5 năm 1954, lá cờ Quyết chiến Quyết thắng tung bay trên nóc hầm De Castries, đánh dấu mốc son chói lọi trong lịch sử dân tộc! Hãy bấm đăng ký kênh để đón xem những câu chuyện lịch sử tự hào tiếp theo!`;
 
 const DEFAULT_VOICES: VoiceInfo[] = [
@@ -204,22 +562,57 @@ export const ScriptStudioPage: React.FC = () => {
 
     // 2. Load Project if given
     if (projectId) {
+      let loadedProj: Project | null = null;
       try {
-        const proj = await apiClient.getProject(projectId);
-        setProject(proj);
-        if (proj.genre) setSelectedGenre(proj.genre);
-        if (proj.video_type) {
-          setVideoFormat(proj.video_type);
-          handleFormatChange(proj.video_type);
-        }
+        loadedProj = await apiClient.getProject(projectId);
       } catch (e) {
         console.warn('Could not load project from API, checking local storage:', e);
         const local = localStorage.getItem('demo_projects');
         if (local) {
-          const list: Project[] = JSON.parse(local);
-          const found = list.find((p) => p.id === projectId);
-          if (found) setProject(found);
+          try {
+            const list: Project[] = JSON.parse(local);
+            loadedProj = list.find((p) => p.id === projectId) || null;
+          } catch {
+            // ignore
+          }
         }
+      }
+
+      if (loadedProj) {
+        setProject(loadedProj);
+        const pGenre = loadedProj.genre || 'general';
+        const pType = loadedProj.video_type || 'short-form';
+        setSelectedGenre(pGenre);
+        setVideoFormat(pType);
+        handleFormatChange(pType);
+
+        // Check if user already has a saved manifest/script for this specific project
+        const savedManifestKey = `studio_manifest_${projectId}`;
+        const savedScriptKey = `studio_script_${projectId}`;
+        const localSavedManifest = localStorage.getItem(savedManifestKey);
+        const localSavedScript = localStorage.getItem(savedScriptKey);
+
+        if (localSavedManifest) {
+          try {
+            const parsedManifest = JSON.parse(localSavedManifest);
+            setManifest(parsedManifest);
+            if (localSavedScript) {
+              setScriptText(localSavedScript);
+            }
+            setTopicQuery(parsedManifest.title || loadedProj.title);
+            return;
+          } catch (err) {
+            console.warn('Failed to parse saved manifest:', err);
+          }
+        }
+
+        // Initialize tailored default manifest & script for this project's genre and title
+        const tmpl = buildDefaultManifestForProject(loadedProj.title, pGenre, pType, projectId);
+        setManifest(tmpl.manifest);
+        setScriptText(tmpl.script);
+        setTopicQuery(tmpl.topic);
+        localStorage.setItem(savedManifestKey, JSON.stringify(tmpl.manifest));
+        localStorage.setItem(savedScriptKey, tmpl.script);
       }
     }
   };
@@ -514,9 +907,15 @@ export const ScriptStudioPage: React.FC = () => {
     setIsSaving(true);
     try {
       if (projectId) {
-        await apiClient.updateManifest(projectId, manifest);
+        localStorage.setItem(`studio_manifest_${projectId}`, JSON.stringify(manifest));
+        localStorage.setItem(`studio_script_${projectId}`, scriptText);
+        try {
+          await apiClient.updateManifest(projectId, manifest);
+        } catch (apiErr) {
+          console.warn('API updateManifest failed, saved locally:', apiErr);
+        }
       }
-      setNotice('Đã lưu toàn bộ tiến độ kịch bản vào cơ sở dữ liệu!');
+      setNotice('Đã lưu toàn bộ tiến độ kịch bản vào dự án!');
     } catch (e: any) {
       setNotice(`Lỗi lưu dự án: ${e.message}`);
     } finally {

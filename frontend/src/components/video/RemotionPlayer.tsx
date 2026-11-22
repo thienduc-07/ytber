@@ -1,7 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
 import type { SceneManifest } from '../../types/database';
 import { AnimationEngine } from '../../services/animationEngine';
-import { Play, Pause, RotateCcw, Volume2, VolumeX } from 'lucide-react';
+import { 
+  Play, Pause, RotateCcw, Volume2, VolumeX, ChevronLeft, ChevronRight, SkipBack, SkipForward
+} from 'lucide-react';
 
 interface RemotionPlayerProps {
   manifest: SceneManifest;
@@ -20,6 +22,24 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
   const [localTime, setLocalTime] = useState(currentTimeSec);
 
   const totalDuration = manifest.scenes.reduce((acc, s) => acc + s.duration_seconds, 0) || 60;
+
+  // Sync local time with external timeline playhead changes
+  useEffect(() => {
+    if (!isPlaying) {
+      setLocalTime(currentTimeSec);
+    }
+  }, [currentTimeSec, isPlaying]);
+
+  // DaVinci Timecode Formatter: HH:MM:SS:FF at 30 FPS
+  const formatTimecode = (sec: number) => {
+    const totalFrames = Math.floor(sec * 30);
+    const frames = totalFrames % 30;
+    const totalSeconds = Math.floor(sec);
+    const s = totalSeconds % 60;
+    const m = Math.floor(totalSeconds / 60) % 60;
+    const h = Math.floor(totalSeconds / 3600);
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${frames.toString().padStart(2, '0')}`;
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -47,7 +67,7 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
     }
 
     if (activeScene) {
-      // 1. Render Rich Temporal Animation (Parallax, Vector Characters, Maps, Infographics, Particles)
+      // 1. Render Rich Temporal Animation
       const isSpeaking = isPlaying && !!activeScene.narration_text;
       AnimationEngine.renderScene(
         ctx,
@@ -60,12 +80,11 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
         isSpeaking
       );
 
-      // 2. Render Ricks Clips 3000 Kinetic Pop Subtitles (Word-by-word bouncing karaoke)
+      // 2. Render Modern Clean Kinetic Subtitles (Lower third, NO bounding boxes around words)
       const text = activeScene.narration_text?.trim() || '';
       if (text) {
         const words = text.split(/\s+/).filter(Boolean);
         if (words.length > 0) {
-          // Calculate active word index from millisecond boundary cues
           const cues = activeScene.subtitles_json || [];
           const localMs = Math.round(localT * activeScene.duration_seconds * 1000);
           let activeIdx = -1;
@@ -85,14 +104,15 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
           }
 
           // Chunk words into rapid 3-4 word phrases centered on screen
-          const wordsPerChunk = 4;
+          const wordsPerChunk = 3;
           const chunkStart = Math.floor(activeIdx / wordsPerChunk) * wordsPerChunk;
           const currentChunk = words.slice(chunkStart, chunkStart + wordsPerChunk);
           const relActive = activeIdx - chunkStart;
 
-          // Position: Eye-level upper-middle for viral short-form retention
-          const subY = Math.round(h * 0.54);
-          const fontSize = Math.round(Math.min(w, h) * 0.058);
+          // Safe Lower-Third Zone Positioning
+          const isLong = manifest.video_format === 'long-form';
+          const subY = isLong ? Math.round(h * 0.86) : Math.round(h * 0.78);
+          const fontSize = Math.round(Math.min(w, h) * (isLong ? 0.048 : 0.056));
 
           ctx.save();
           ctx.font = `900 ${fontSize}px "Montserrat", "Impact", "Arial Black", sans-serif`;
@@ -112,15 +132,15 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
 
             ctx.save();
             if (isAct) {
-              // Ricks Clips Signature Kinetic Pop bounce (scale 1.15x)
+              // Word Highlight Pop: Scale 1.20x, Vibrant Orange Fill, Golden Glow
               const cx = curX + wordW / 2;
               const cy = subY;
               ctx.translate(cx, cy);
-              ctx.scale(1.15, 1.15);
+              ctx.scale(1.20, 1.20);
               ctx.translate(-cx, -cy);
 
-              ctx.shadowColor = '#FACC15';
-              ctx.shadowBlur = 18;
+              ctx.shadowColor = '#FF6B00';
+              ctx.shadowBlur = 24;
             } else {
               ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
               ctx.shadowBlur = 12;
@@ -135,8 +155,8 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
             ctx.miterLimit = 2;
             ctx.strokeText(wd, curX, subY);
 
-            // Active word highlighted in bright yellow (#FACC15), inactive in white (#FFFFFF)
-            ctx.fillStyle = isAct ? '#FACC15' : '#FFFFFF';
+            // Active word: vibrant orange #FF5722 / #FF9800, Inactive: pure white #FFFFFF (No boxes)
+            ctx.fillStyle = isAct ? '#FF5722' : '#FFFFFF';
             ctx.fillText(wd, curX, subY);
             ctx.restore();
 
@@ -172,10 +192,30 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [isPlaying, totalDuration, onTimeUpdate]);
 
+  const handleStepFrame = (forward: boolean) => {
+    const frameDur = 1.0 / 30.0;
+    const next = forward 
+      ? Math.min(totalDuration, localTime + frameDur)
+      : Math.max(0, localTime - frameDur);
+    setLocalTime(next);
+    if (onTimeUpdate) onTimeUpdate(next);
+  };
+
   return (
     <div className="flex flex-col items-center bg-studio-surface border border-studio-border rounded-2xl p-4 shadow-2xl w-full">
-      {/* Dynamic Aspect Ratio Canvas Preview (9:16 Shorts vs 16:9 Long-Form) */}
-      <div className={`relative ${manifest.video_format === 'long-form' ? 'aspect-[16/9] max-w-[420px]' : 'aspect-[9/16] max-w-[300px]'} w-full bg-black rounded-xl overflow-hidden shadow-inner border border-studio-border`}>
+      {/* DaVinci Resolve Top Timecode Bar */}
+      <div className="w-full flex items-center justify-between pb-2 mb-2 border-b border-gray-800 text-xs">
+        <span className="font-bold text-gray-300">Khung Hình Xem Trước</span>
+        <div className="flex items-center gap-1.5 bg-[#070b16] border border-studio-border px-2.5 py-1 rounded-lg">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="font-mono text-emerald-400 font-bold tracking-wider text-xs">
+            {formatTimecode(localTime)}
+          </span>
+        </div>
+      </div>
+
+      {/* Dynamic Aspect Ratio Canvas Preview */}
+      <div className={`relative ${manifest.video_format === 'long-form' ? 'aspect-[16/9] max-w-[420px]' : 'aspect-[9/16] max-w-[280px]'} w-full bg-black rounded-xl overflow-hidden shadow-inner border border-studio-border`}>
         <canvas
           ref={canvasRef}
           width={manifest.video_specs?.width || 1080}
@@ -186,25 +226,25 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
         {!isPlaying && (
           <button
             onClick={() => setIsPlaying(true)}
-            className="absolute inset-0 m-auto w-16 h-16 bg-studio-primary/90 text-white rounded-full flex items-center justify-center hover:scale-110 transition shadow-lg"
+            className="absolute inset-0 m-auto w-14 h-14 bg-studio-primary/90 text-white rounded-full flex items-center justify-center hover:scale-110 transition shadow-lg"
           >
-            <Play className="w-8 h-8 fill-current ml-1" />
+            <Play className="w-7 h-7 fill-current ml-1" />
           </button>
         )}
       </div>
 
-      {/* Playback Controls */}
-      <div className="w-full max-w-[320px] mt-4 flex flex-col gap-2">
-        {/* Timeline Scrubber */}
+      {/* DaVinci Resolve Professional Transport Controls */}
+      <div className="w-full max-w-[340px] mt-3 flex flex-col gap-2">
+        {/* Continuous Scrubber Slider */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400 font-mono">
+          <span className="text-[11px] text-gray-400 font-mono w-10 text-right">
             {localTime.toFixed(1)}s
           </span>
           <input
             type="range"
             min={0}
             max={totalDuration}
-            step={0.1}
+            step={0.05}
             value={localTime}
             onChange={(e) => {
               const val = parseFloat(e.target.value);
@@ -213,30 +253,69 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
             }}
             className="w-full accent-studio-primary cursor-pointer h-1.5 bg-studio-card rounded-lg"
           />
-          <span className="text-xs text-gray-400 font-mono">
+          <span className="text-[11px] text-gray-400 font-mono w-10">
             {totalDuration.toFixed(1)}s
           </span>
         </div>
 
-        {/* Buttons Row */}
-        <div className="flex items-center justify-between text-gray-300 px-1">
+        {/* Transport Buttons (DaVinci Standard: Jump Start, Frame Back, Play/Pause, Frame Forward, Jump End) */}
+        <div className="flex items-center justify-center gap-2 text-gray-300">
+          <button
+            onClick={() => { setLocalTime(0); if (onTimeUpdate) onTimeUpdate(0); }}
+            className="p-1.5 hover:text-white rounded-lg hover:bg-studio-card transition"
+            title="Về đầu phim (Jump to Start)"
+          >
+            <SkipBack className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => handleStepFrame(false)}
+            className="p-1.5 hover:text-white rounded-lg hover:bg-studio-card transition"
+            title="Lùi 1 khung hình (Step 1 Frame Back)"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
           <button
             onClick={() => setIsPlaying(!isPlaying)}
-            className="p-2 hover:text-white rounded-lg hover:bg-studio-card transition"
+            className="p-2.5 bg-studio-primary hover:bg-indigo-600 text-white rounded-xl shadow transition"
+            title={isPlaying ? 'Tạm dừng (Space)' : 'Phát (Space)'}
           >
-            {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+            {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
           </button>
+
           <button
-            onClick={() => { setLocalTime(0); setIsPlaying(false); }}
-            className="p-2 hover:text-white rounded-lg hover:bg-studio-card transition"
+            onClick={() => handleStepFrame(true)}
+            className="p-1.5 hover:text-white rounded-lg hover:bg-studio-card transition"
+            title="Tiến 1 khung hình (Step 1 Frame Forward)"
           >
-            <RotateCcw className="w-5 h-5" />
+            <ChevronRight className="w-4 h-4" />
           </button>
+
+          <button
+            onClick={() => { setLocalTime(totalDuration); if (onTimeUpdate) onTimeUpdate(totalDuration); }}
+            className="p-1.5 hover:text-white rounded-lg hover:bg-studio-card transition"
+            title="Đến cuối phim (Jump to End)"
+          >
+            <SkipForward className="w-4 h-4" />
+          </button>
+
+          <div className="w-[1px] h-4 bg-gray-700 mx-1" />
+
+          <button
+            onClick={() => { setLocalTime(0); setIsPlaying(false); if (onTimeUpdate) onTimeUpdate(0); }}
+            className="p-1.5 hover:text-white rounded-lg hover:bg-studio-card transition"
+            title="Đặt lại từ đầu"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+
           <button
             onClick={() => setIsMuted(!isMuted)}
-            className="p-2 hover:text-white rounded-lg hover:bg-studio-card transition"
+            className="p-1.5 hover:text-white rounded-lg hover:bg-studio-card transition"
+            title={isMuted ? 'Bật âm' : 'Tắt âm'}
           >
-            {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4" />}
           </button>
         </div>
       </div>

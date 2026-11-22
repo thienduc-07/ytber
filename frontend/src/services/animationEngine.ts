@@ -62,7 +62,15 @@ export class AnimationEngine {
 
     // 3. Render Domain-Specific Visual Modalities
     const method = scene.visual_method || 'toon';
-    if (method === 'map') {
+    if (method === 'anatomy') {
+      this.renderAnatomyVisual(ctx, w, h, scene, localT, globalT);
+    } else if (method === 'schematic') {
+      this.renderSchematicVisual(ctx, w, h, scene, localT, globalT);
+    } else if (method === 'horror') {
+      this.renderHorrorVisual(ctx, w, h, scene, localT, globalT);
+    } else if (method === 'presenter') {
+      this.renderPresenterVisual(ctx, w, h, scene, localT, globalT, isSpeaking);
+    } else if (method === 'map') {
       this.renderAnimatedMap(ctx, w, h, scene, localT);
     } else if (method === 'infographic') {
       this.renderAnimatedInfographics(ctx, w, h, scene, localT);
@@ -72,7 +80,9 @@ export class AnimationEngine {
     }
 
     // 4. Foreground Occlusion & Framing Layer (Fast Parallax 1.35x for 2.5D Depth)
-    this.renderForegroundOcclusion(ctx, w, h, scene, localT, globalT);
+    if (method !== 'anatomy' && method !== 'schematic') {
+      this.renderForegroundOcclusion(ctx, w, h, scene, localT, globalT);
+    }
 
     // 5. Render Environmental Particle Overlay (Spores, Fireflies, Embers, Stars)
     this.renderParticles(ctx, w, h, scene, localT, globalT);
@@ -982,6 +992,609 @@ export class AnimationEngine {
       ctx.closePath();
       ctx.fill();
     }
+
+    ctx.restore();
+  }
+
+  /**
+   * Domain Visual: Anatomical & Biological Internal Organs (Heart 72 BPM & Live ECG Monitor)
+   */
+  private static renderAnatomyVisual(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    _scene: SceneItem,
+    _localT: number,
+    globalT: number
+  ) {
+    ctx.save();
+
+    // 1. Dark Medical Monitor Ground
+    ctx.fillStyle = '#06080E';
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle Grid Overlay
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.06)';
+    ctx.lineWidth = 1;
+    const gridSize = 40;
+    for (let x = 0; x < w; x += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    for (let y = 0; y < h; y += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+
+    // 2. Pulse Mechanics (72 BPM = 0.833s period, double beat systole/diastole)
+    const period = 0.833;
+    const cycle = (globalT % period) / period;
+    let pulse = 1.0;
+    if (cycle < 0.15) {
+      pulse += Math.sin((cycle / 0.15) * Math.PI) * 0.10; // First lub
+    } else if (cycle >= 0.18 && cycle < 0.32) {
+      pulse += Math.sin(((cycle - 0.18) / 0.14) * Math.PI) * 0.06; // Second dub
+    }
+
+    const cx = w * 0.5;
+    const cy = h * 0.40;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(pulse, pulse);
+
+    // Glow under heart
+    const glow = ctx.createRadialGradient(0, 0, 40, 0, 0, 220);
+    glow.addColorStop(0, 'rgba(239, 68, 68, 0.35)');
+    glow.addColorStop(0.6, 'rgba(185, 28, 28, 0.12)');
+    glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, 220, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pulmonary Artery (Blue Arch behind)
+    ctx.fillStyle = '#0284C7';
+    ctx.beginPath();
+    ctx.arc(-55, -95, 42, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Aortic Arch (Crimson Tube)
+    ctx.strokeStyle = '#DC2626';
+    ctx.lineWidth = 36;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(-8, -115, 60, Math.PI * 0.85, Math.PI * 0.15, true);
+    ctx.stroke();
+
+    // Branching Carotid Arteries
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.moveTo(-40, -170);
+    ctx.lineTo(-45, -205);
+    ctx.moveTo(-10, -175);
+    ctx.lineTo(-10, -212);
+    ctx.moveTo(22, -170);
+    ctx.lineTo(28, -205);
+    ctx.stroke();
+
+    // Main Heart Muscle (Ventricles & Atria)
+    const heartGrad = ctx.createRadialGradient(-30, -30, 20, 0, 20, 150);
+    heartGrad.addColorStop(0, '#EF4444');
+    heartGrad.addColorStop(0.65, '#B91C1C');
+    heartGrad.addColorStop(1, '#5B0D0D');
+
+    ctx.fillStyle = heartGrad;
+    ctx.beginPath();
+    ctx.moveTo(0, 140);
+    // Left ventricle curve
+    ctx.bezierCurveTo(-150, 60, -160, -80, -65, -80);
+    // Center notch
+    ctx.bezierCurveTo(-15, -80, 0, -40, 0, -30);
+    // Right ventricle curve
+    ctx.bezierCurveTo(0, -40, 15, -80, 65, -80);
+    ctx.bezierCurveTo(160, -80, 150, 60, 0, 140);
+    ctx.closePath();
+    ctx.fill();
+
+    // Specular Highlight (3D Volume Depth)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.beginPath();
+    ctx.ellipse(-50, -20, 40, 65, -Math.PI / 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Anterior Interventricular Artery (Coronary Groove Line)
+    ctx.strokeStyle = '#FACC15';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-18, -40);
+    ctx.quadraticCurveTo(-10, 40, -5, 125);
+    ctx.stroke();
+
+    // Oxygenated blood flow particles
+    for (let p = 0; p < 8; p++) {
+      const pOffset = (globalT * 2.0 + p * 0.4) % 1.0;
+      const angle = Math.PI * 0.85 - pOffset * (Math.PI * 0.7);
+      const px = -8 + Math.cos(angle) * 60;
+      const py = -115 + Math.sin(angle) * 60;
+      ctx.fillStyle = '#FEE2E2';
+      ctx.beginPath();
+      ctx.arc(px, py, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore(); // Heart transform
+
+    // 3. Technical Leader Line Callouts
+    // Callout 1: Aorta
+    const callout1X = w * 0.72;
+    const callout1Y = h * 0.22;
+    ctx.strokeStyle = '#38BDF8';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(cx - 10, cy - 130);
+    ctx.lineTo(callout1X - 10, callout1Y + 20);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Callout 1 Box
+    ctx.fillStyle = 'rgba(14, 23, 42, 0.92)';
+    ctx.strokeStyle = '#38BDF8';
+    ctx.lineWidth = 1.8;
+    ctx.fillRect(callout1X - 10, callout1Y - 10, 220, 56);
+    ctx.strokeRect(callout1X - 10, callout1Y - 10, 220, 56);
+    ctx.fillStyle = '#38BDF8';
+    ctx.font = 'bold 12px "Space Grotesk", monospace';
+    ctx.fillText('ĐỘNG MẠCH CHỦ (AORTA)', callout1X, callout1Y + 12);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 14px "Montserrat", sans-serif';
+    ctx.fillText('ÁP LỰC: 120 mmHg', callout1X, callout1Y + 34);
+
+    // Callout 2: Left Ventricle
+    const callout2X = w * 0.72;
+    const callout2Y = h * 0.48;
+    ctx.strokeStyle = '#38BDF8';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(cx - 15, cy + 30);
+    ctx.lineTo(callout2X - 10, callout2Y + 20);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = 'rgba(14, 23, 42, 0.92)';
+    ctx.fillRect(callout2X - 10, callout2Y - 10, 220, 56);
+    ctx.strokeRect(callout2X - 10, callout2Y - 10, 220, 56);
+    ctx.fillStyle = '#38BDF8';
+    ctx.font = 'bold 12px "Space Grotesk", monospace';
+    ctx.fillText('TÂM THẤT TRÁI', callout2X, callout2Y + 12);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 14px "Montserrat", sans-serif';
+    ctx.fillText('CÔNG SUẤT: 5.2 L/P', callout2X, callout2Y + 34);
+
+    // Top Telemetry Badge
+    ctx.fillStyle = 'rgba(14, 23, 42, 0.85)';
+    ctx.strokeStyle = '#22C55E';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(25, h * 0.22 - 10, 210, 56);
+    ctx.strokeRect(25, h * 0.22 - 10, 210, 56);
+    ctx.fillStyle = '#22C55E';
+    ctx.font = 'bold 11px "Space Grotesk", monospace';
+    ctx.fillText('NHỊP TIM SINH HỌC', 38, h * 0.22 + 12);
+    ctx.font = '900 18px "Montserrat", sans-serif';
+    ctx.fillText('72 BPM', 38, h * 0.22 + 34);
+
+    // 4. Live ECG Telemetry Monitor (Lower third above subtitles)
+    const ecgY = h * 0.68;
+    const ecgH = 80;
+    const ecgW = w - 50;
+
+    ctx.fillStyle = 'rgba(8, 14, 28, 0.85)';
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(25, ecgY, ecgW, ecgH);
+    ctx.strokeRect(25, ecgY, ecgW, ecgH);
+
+    ctx.fillStyle = '#22C55E';
+    ctx.font = 'bold 11px "Space Grotesk", monospace';
+    ctx.fillText('ECG TELEMETRY [LEAD II]', 38, ecgY + 20);
+
+    // ECG Waveform Path
+    ctx.strokeStyle = '#22C55E';
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#22C55E';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+
+    const baselineY = ecgY + 50;
+    const waveProgress = ((globalT * 120) % (ecgW - 40));
+
+    ctx.moveTo(35, baselineY);
+    for (let x = 35; x < 35 + waveProgress; x += 3) {
+      const rel = (x - 35) % 180;
+      let yOffset = 0;
+      if (rel > 60 && rel < 75) yOffset = -5; // P wave
+      else if (rel >= 75 && rel < 82) yOffset = 4; // Q
+      else if (rel >= 82 && rel < 92) yOffset = -36; // R spike
+      else if (rel >= 92 && rel < 100) yOffset = 10; // S
+      else if (rel >= 115 && rel < 135) yOffset = -9; // T wave
+      ctx.lineTo(x, baselineY + yOffset);
+    }
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  /**
+   * Domain Visual: Scientific & Technical Schematic (Holographic Radar & Physics Blueprint)
+   */
+  private static renderSchematicVisual(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    _scene: SceneItem,
+    _localT: number,
+    globalT: number
+  ) {
+    ctx.save();
+
+    // 1. Blueprint Deep Navy Ground
+    ctx.fillStyle = '#070C1A';
+    ctx.fillRect(0, 0, w, h);
+
+    // Blueprint Cyan Grid
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < w; x += 36) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    for (let y = 0; y < h; y += 36) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+
+    const cx = w * 0.5;
+    const cy = h * 0.42;
+
+    // Holographic Circular Target System
+    const radius = Math.min(w, h) * 0.28;
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.65, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.3, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Rotating Sweep Laser Beam
+    const sweepAngle = (globalT * 1.6) % (Math.PI * 2);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(sweepAngle);
+
+    const sweepGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, radius);
+    sweepGrad.addColorStop(0, 'rgba(56, 189, 248, 0.6)');
+    sweepGrad.addColorStop(0.8, 'rgba(56, 189, 248, 0.15)');
+    sweepGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+    ctx.fillStyle = sweepGrad;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, radius, 0, Math.PI * 0.25);
+    ctx.closePath();
+    ctx.fill();
+
+    // Laser Edge Line
+    ctx.strokeStyle = '#38BDF8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(radius, 0);
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Crosshairs
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - radius - 20, cy);
+    ctx.lineTo(cx + radius + 20, cy);
+    ctx.moveTo(cx, cy - radius - 20);
+    ctx.lineTo(cx, cy + radius + 20);
+    ctx.stroke();
+
+    // Oscilloscope Waveform at Mid-Bottom
+    const oscY = h * 0.66;
+    ctx.strokeStyle = '#FACC15';
+    ctx.lineWidth = 3;
+    ctx.shadowColor = '#FACC15';
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    for (let x = 40; x < w - 40; x += 4) {
+      const freq = 0.04;
+      const amp = Math.sin((x * freq) - (globalT * 6)) * 28;
+      if (x === 40) ctx.moveTo(x, oscY + amp);
+      else ctx.lineTo(x, oscY + amp);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Technical Labels
+    ctx.fillStyle = '#38BDF8';
+    ctx.font = 'bold 12px "Space Grotesk", monospace';
+    ctx.fillText('SƠ ĐỒ NGUYÊN LÝ KHOA HỌC // HỆ THỐNG RADAR & SÓNG', 40, h * 0.16);
+    ctx.fillStyle = '#FACC15';
+    ctx.fillText('DAO ĐỘNG CỘNG HƯỞNG: 4.8 Hz // BẬT', 40, oscY - 35);
+
+    ctx.restore();
+  }
+
+  /**
+   * Domain Visual: Atmospheric Horror (Ancient Abandoned House, Fog & Moon)
+   */
+  private static renderHorrorVisual(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    _scene: SceneItem,
+    _localT: number,
+    globalT: number
+  ) {
+    ctx.save();
+
+    // 1. Midnight Dark Violet / Black Sky
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
+    skyGrad.addColorStop(0, '#04040A');
+    skyGrad.addColorStop(0.65, '#0B0D18');
+    skyGrad.addColorStop(1, '#020306');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    // 2. Full Moon with Halo
+    const moonX = w * 0.72;
+    const moonY = h * 0.20;
+    const moonR = Math.min(w, h) * 0.10;
+
+    const halo = ctx.createRadialGradient(moonX, moonY, moonR * 0.8, moonX, moonY, moonR * 2.8);
+    halo.addColorStop(0, 'rgba(254, 243, 199, 0.45)');
+    halo.addColorStop(0.5, 'rgba(254, 243, 199, 0.12)');
+    halo.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(moonX, moonY, moonR * 2.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#FEF3C7';
+    ctx.beginPath();
+    ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 3. Ancient Wooden House Silhouette
+    const houseY = h * 0.52;
+    ctx.fillStyle = '#06070D';
+    ctx.beginPath();
+    // Base foundation
+    ctx.rect(w * 0.15, houseY, w * 0.70, h * 0.28);
+    ctx.fill();
+
+    // Tilted roof with curved eaves
+    ctx.beginPath();
+    ctx.moveTo(w * 0.08, houseY + 15);
+    ctx.lineTo(w * 0.50, houseY - 90);
+    ctx.lineTo(w * 0.92, houseY + 15);
+    ctx.lineTo(w * 0.84, houseY + 25);
+    ctx.lineTo(w * 0.50, houseY - 65);
+    ctx.lineTo(w * 0.16, houseY + 25);
+    ctx.closePath();
+    ctx.fill();
+
+    // Crooked wooden window
+    const winX = w * 0.32;
+    const winY = houseY + 30;
+    ctx.fillStyle = 'rgba(251, 146, 60, 0.25)'; // faint warm glow
+    ctx.fillRect(winX, winY, 60, 75);
+    ctx.strokeStyle = '#020306';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(winX, winY, 60, 75);
+    ctx.beginPath();
+    ctx.moveTo(winX + 30, winY);
+    ctx.lineTo(winX + 30, winY + 75);
+    ctx.moveTo(winX, winY + 38);
+    ctx.lineTo(winX + 60, winY + 38);
+    ctx.stroke();
+
+    // Flickering Porch Lantern
+    const lanternX = w * 0.65;
+    const lanternY = houseY + 35;
+    const flicker = 0.75 + Math.sin(globalT * 9.5) * 0.25;
+
+    const lanternGlow = ctx.createRadialGradient(lanternX, lanternY, 5, lanternX, lanternY, 80);
+    lanternGlow.addColorStop(0, `rgba(249, 115, 22, ${flicker})`);
+    lanternGlow.addColorStop(0.5, `rgba(234, 88, 12, ${flicker * 0.35})`);
+    lanternGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = lanternGlow;
+    ctx.beginPath();
+    ctx.arc(lanternX, lanternY, 80, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#FB923C';
+    ctx.fillRect(lanternX - 6, lanternY - 10, 12, 20);
+
+    // 4. Drifting Volumetric Mist Layers across ground
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+    for (let layer = 0; layer < 4; layer++) {
+      const mistY = h * 0.68 + layer * 25;
+      const speed = 25 + layer * 15;
+      const offset = (globalT * speed) % (w * 1.5);
+
+      ctx.beginPath();
+      ctx.moveTo(-100, mistY);
+      for (let x = -100; x < w + 100; x += 50) {
+        const my = mistY + Math.sin((x + offset) * 0.015) * 18;
+        ctx.lineTo(x, my);
+      }
+      ctx.lineTo(w + 100, h);
+      ctx.lineTo(-100, h);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * Domain Visual: Medical Doctor & Expert Presenter (2D Rigged Lip-Sync & Natural Idle)
+   */
+  private static renderPresenterVisual(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    _scene: SceneItem,
+    _localT: number,
+    globalT: number,
+    isSpeaking: boolean
+  ) {
+    ctx.save();
+
+    // Studio Background Gradient
+    const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+    bgGrad.addColorStop(0, '#0F172A');
+    bgGrad.addColorStop(1, '#020617');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    const cx = w * 0.5;
+    const cy = h * 0.55;
+
+    // Doctor Body Idle Breathing
+    const breath = Math.sin(globalT * 2.2) * 4;
+
+    ctx.save();
+    ctx.translate(cx, cy + breath);
+
+    // Torso / White Medical Coat
+    ctx.fillStyle = '#F8FAFC';
+    ctx.beginPath();
+    ctx.moveTo(-90, 80);
+    ctx.lineTo(90, 80);
+    ctx.lineTo(110, 260);
+    ctx.lineTo(-110, 260);
+    ctx.closePath();
+    ctx.fill();
+
+    // Inner Blue Scrubs Collar
+    ctx.fillStyle = '#0284C7';
+    ctx.beginPath();
+    ctx.moveTo(-35, 80);
+    ctx.lineTo(0, 140);
+    ctx.lineTo(35, 80);
+    ctx.closePath();
+    ctx.fill();
+
+    // Medical Stethoscope
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(-45, 90);
+    ctx.quadraticCurveTo(-35, 175, 0, 185);
+    ctx.quadraticCurveTo(35, 175, 45, 90);
+    ctx.stroke();
+
+    // Stethoscope Bell
+    ctx.fillStyle = '#94A3B8';
+    ctx.beginPath();
+    ctx.arc(0, 185, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Head with Natural Tilting
+    const headTilt = Math.sin(globalT * 1.8) * 0.04;
+    ctx.save();
+    ctx.translate(0, 25);
+    ctx.rotate(headTilt);
+
+    // Face / Head
+    ctx.fillStyle = '#FBBF24';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 52, 64, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hair
+    ctx.fillStyle = '#1E293B';
+    ctx.beginPath();
+    ctx.arc(0, -18, 54, Math.PI, 0);
+    ctx.fill();
+
+    // Eyes with Blinking
+    const isBlinking = (globalT % 3.6) < 0.16;
+    ctx.fillStyle = '#0F172A';
+    if (isBlinking) {
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#0F172A';
+      ctx.beginPath();
+      ctx.moveTo(-28, 0);
+      ctx.lineTo(-12, 0);
+      ctx.moveTo(12, 0);
+      ctx.lineTo(28, 0);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(-20, 0, 5, 0, Math.PI * 2);
+      ctx.arc(20, 0, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Glasses
+    ctx.strokeStyle = '#0F172A';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(-32, -10, 24, 20);
+    ctx.strokeRect(8, -10, 24, 20);
+    ctx.beginPath();
+    ctx.moveTo(-8, 0);
+    ctx.lineTo(8, 0);
+    ctx.stroke();
+
+    // Talking Mouth Lip-Sync
+    if (isSpeaking) {
+      const mouthOpen = Math.sin(globalT * 18) > 0;
+      if (mouthOpen) {
+        ctx.fillStyle = '#881337';
+        ctx.beginPath();
+        ctx.ellipse(0, 32, 10, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = '#881337';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-10, 32);
+        ctx.lineTo(10, 32);
+        ctx.stroke();
+      }
+    } else {
+      ctx.strokeStyle = '#881337';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 28, 12, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+    }
+
+    ctx.restore(); // Head
+    ctx.restore(); // Body
 
     ctx.restore();
   }

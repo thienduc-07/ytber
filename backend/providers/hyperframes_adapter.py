@@ -464,41 +464,32 @@ class HyperFramesAdapter:
         flex-wrap: wrap;
         align-items: center;
         justify-content: center;
-        gap: 14px 18px;
+        gap: 10px 22px;
         max-width: 1000px;
         will-change: transform, opacity;
       }}
       .sub-word-box {{
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 10px 22px;
-        border-radius: 18px;
-        background: rgba(0, 0, 0, 0.5);
-        border: 2px solid rgba(255, 255, 255, 0.2);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
-        will-change: transform, background-color, border-color, box-shadow;
+        display: inline-block;
+        will-change: transform;
       }}
       .sub-word-text {{
         font-family: var(--font-primary), 'Montserrat', 'Impact', sans-serif;
-        font-size: 58px;
+        font-size: 64px;
         font-weight: 900;
         text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.95);
+        color: #FFFFFF;
         letter-spacing: -0.01em;
         -webkit-text-stroke: 8px #000000;
         paint-order: stroke fill;
         text-shadow: 0 4px 18px rgba(0,0,0,0.95);
         line-height: 1.1;
+        display: inline-block;
+        will-change: transform, color, text-shadow;
       }}
       @media (min-aspect-ratio: 1/1) {{
         .sub-word-text {{
-          font-size: 42px;
+          font-size: 46px;
           -webkit-text-stroke: 6px #000000;
-        }}
-        .sub-word-box {{
-          padding: 8px 18px;
-          border-radius: 14px;
         }}
       }}
 
@@ -1258,29 +1249,43 @@ class HyperFramesAdapter:
             return "", []
 
         total_words = len(words)
-        approx_word_dur = max(0.18, duration / total_words)
+        effective_dur = max(0.8, duration - 0.25)
+
+        # Proportional syllable weights to prevent subtitle rushing or lagging
+        weights = []
+        for idx, w in enumerate(words):
+            clean_len = max(1, len(re.sub(r'[^\w]', '', w)))
+            wt = 0.70 + (clean_len * 0.12)
+            if w.endswith(('.', '!', '?', ':', ';')):
+                wt += 0.45
+            elif w.endswith(','):
+                wt += 0.25
+            weights.append(wt)
+        total_weight = sum(weights) or 1.0
 
         # Build list of word timings
         word_items = []
+        running_time = start_time + 0.10
+
         for w_idx, w in enumerate(words):
             clean_text = re.sub(r'[^\w\s-]', '', w) or w
-            if subtitles_json and w_idx < len(subtitles_json):
-                w_start_ms = subtitles_json[w_idx].get("start_ms", int(w_idx * approx_word_dur * 1000))
-                w_end_ms = subtitles_json[w_idx].get("end_ms", int((w_idx + 1) * approx_word_dur * 1000))
+            if subtitles_json and len(subtitles_json) >= total_words:
+                w_start_ms = subtitles_json[w_idx].get("start_ms", 0)
+                w_end_ms = subtitles_json[w_idx].get("end_ms", 0)
                 w_time = start_time + round(w_start_ms / 1000.0, 3)
-                w_dur = max(0.14, round((w_end_ms - w_start_ms) / 1000.0, 3))
+                w_dur = max(0.12, round((w_end_ms - w_start_ms) / 1000.0, 3))
             else:
-                w_time = start_time + round(w_idx * approx_word_dur, 3)
-                w_dur = max(0.14, round(approx_word_dur, 3))
+                w_dur = max(0.12, round((weights[w_idx] / total_weight) * effective_dur, 3))
+                w_time = round(running_time, 3)
+                running_time += w_dur
 
             word_items.append({
                 "index": w_idx,
                 "text": clean_text,
                 "time": w_time,
                 "duration": w_dur,
-                "end_time": w_time + w_dur,
+                "end_time": round(w_time + w_dur, 3),
                 "id": f"w_{scene_idx}_{w_idx}",
-                "box_id": f"wbox_{scene_idx}_{w_idx}"
             })
 
         # Chunk words into groups of 3 (or 2-4) words per card so subtitle doesn't dump whole paragraph on screen
@@ -1301,11 +1306,9 @@ class HyperFramesAdapter:
 
             word_elements = []
             for w in chunk:
-                # Individual word wrapped with a dedicated "khung cam" highlight pill badge container
+                # Clean text-only word without any box/borders wrapping it
                 word_elements.append(f"""
-                  <div id="{w['box_id']}" class="sub-word-box">
-                    <span id="{w['id']}" class="sub-word-text">{w['text']}</span>
-                  </div>
+                  <span id="{w['id']}" class="sub-word-text">{w['text']}</span>
                 """)
 
             chunk_html_parts.append(f"""
@@ -1317,41 +1320,28 @@ class HyperFramesAdapter:
             # Animate phrase chunk card entry and exit
             tweens.append(f"""
       // Chunk {scene_idx}_{c_idx} appearance
-      tl.set("#{chunk_id}", {{ display: "flex", opacity: 0, scale: 0.88, y: 15 }}, {c_start - 0.04});
+      tl.set("#{chunk_id}", {{ display: "flex", opacity: 0, scale: 0.90, y: 15 }}, {c_start - 0.04});
       tl.to("#{chunk_id}", {{ opacity: 1, scale: 1.0, y: 0, duration: 0.14, ease: "back.out(2)" }}, {c_start});
       tl.to("#{chunk_id}", {{ opacity: 0, scale: 0.95, y: -10, duration: 0.1, ease: "power1.in" }}, {c_end});
       tl.set("#{chunk_id}", {{ display: "none" }}, {c_end + 0.11});
 """)
 
-            # Word-by-word bouncing "Khung Cam" pill highlight within this chunk
+            # Word-by-word bouncing highlight on the word text itself (no bounding boxes)
             for w in chunk:
-                # Active word highlight: vibrant orange gradient badge (#FF6B00 / #FF3D00) with scale pop
                 tweens.append(f"""
-      tl.to("#{w['box_id']}", {{
-        scale: 1.24,
-        backgroundColor: "rgba(255, 87, 34, 0.96)",
-        borderColor: "#FFE082",
-        boxShadow: "0 0 32px rgba(255, 107, 0, 0.95), 0 4px 15px rgba(0,0,0,0.8)",
+      tl.to("#{w['id']}", {{
+        scale: 1.25,
+        color: "#FF5722",
+        textShadow: "0 0 32px rgba(255, 87, 34, 0.95), 0 0 12px #FF9800, 0 4px 14px rgba(0,0,0,0.9)",
         duration: 0.08,
-        ease: "back.out(2.5)"
+        ease: "back.out(2.2)"
       }}, {w['time']});
       tl.to("#{w['id']}", {{
-        color: "#FFFFFF",
-        textShadow: "0 0 20px #FFE082, 0 4px 10px rgba(0,0,0,0.9)",
-        duration: 0.08
-      }}, {w['time']});
-      tl.to("#{w['box_id']}", {{
         scale: 1.0,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
-        borderColor: "rgba(255, 255, 255, 0.2)",
-        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.7)",
+        color: "#FFFFFF",
+        textShadow: "0 4px 18px rgba(0,0,0,0.95)",
         duration: 0.12,
         ease: "power2.inOut"
-      }}, {w['end_time']});
-      tl.to("#{w['id']}", {{
-        color: "rgba(255, 255, 255, 0.95)",
-        textShadow: "0 4px 18px rgba(0,0,0,0.95)",
-        duration: 0.12
       }}, {w['end_time']});
 """)
 

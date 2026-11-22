@@ -30,32 +30,90 @@ export const DashboardPage: React.FC = () => {
     setLoading(true);
     try {
       const projs = await apiClient.listProjects();
-      setProjects(projs);
+      if (projs && projs.length > 0) {
+        setProjects(projs);
+        setLoading(false);
+        return;
+      }
     } catch (e) {
       console.warn('API listProjects failed, using local storage fallback:', e);
-      const local = localStorage.getItem('demo_projects');
-      if (local) {
-        setProjects(JSON.parse(local));
-      } else {
-        const demo: Project[] = [
-          {
-            id: 'demo-p1',
-            user_id: 'anonymous',
-            title: 'Chiến Thắng Điện Biên Phủ 1954',
-            description: 'Kịch bản lịch sử hào hùng 60s cho Shorts/TikTok',
-            status: 'ready',
-            video_type: 'short-form',
-            genre: 'historical_doc',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }
-        ];
-        setProjects(demo);
-        localStorage.setItem('demo_projects', JSON.stringify(demo));
-      }
-    } finally {
-      setLoading(false);
     }
+
+    const defaultDemos: Project[] = [
+      {
+        id: 'demo-p1',
+        user_id: 'anonymous',
+        title: 'Chiến Thắng Điện Biên Phủ 1954',
+        description: 'Kịch bản lịch sử hào hùng 60s cho Shorts/TikTok',
+        status: 'ready',
+        video_type: 'short-form',
+        genre: 'historical_doc',
+        created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+        updated_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+      },
+      {
+        id: 'demo-p2',
+        user_id: 'anonymous',
+        title: 'Bí Ẩn Căn Nhà Ma Cuối Làng',
+        description: 'Phim ngắn kinh dị, rùng rợn, khám phá bí mật nửa thế kỷ',
+        status: 'ready',
+        video_type: 'short-form',
+        genre: 'horror',
+        created_at: new Date(Date.now() - 3600000 * 3).toISOString(),
+        updated_at: new Date(Date.now() - 3600000 * 3).toISOString(),
+      },
+      {
+        id: 'demo-p3',
+        user_id: 'anonymous',
+        title: 'Giải Phẫu Hệ Cơ Quan & Trái Tim Sinh Học',
+        description: 'Giải phẫu 2.5D, nhịp tim 72 BPM và sóng điện tâm đồ ECG',
+        status: 'ready',
+        video_type: 'short-form',
+        genre: 'anatomy',
+        created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+        updated_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+      },
+      {
+        id: 'demo-p4',
+        user_id: 'anonymous',
+        title: 'Tăng Trưởng Kinh Tế Việt Nam 2024',
+        description: 'Video chuyên đề 16:9 phân tích chỉ số GDP và dòng vốn FDI',
+        status: 'ready',
+        video_type: 'long-form',
+        genre: 'economics',
+        created_at: new Date(Date.now() - 3600000 * 1).toISOString(),
+        updated_at: new Date(Date.now() - 3600000 * 1).toISOString(),
+      },
+      {
+        id: 'demo-p5',
+        user_id: 'anonymous',
+        title: 'Nguyên Lý Cộng Hưởng Cầu Broughton',
+        description: 'Mô phỏng vật lý khoa học sơ đồ cộng hưởng cơ học chấn động',
+        status: 'ready',
+        video_type: 'short-form',
+        genre: 'science',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+    ];
+
+    const local = localStorage.getItem('demo_projects');
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length >= 3) {
+          setProjects(parsed);
+          setLoading(false);
+          return;
+        }
+      } catch {
+        // use defaultDemos
+      }
+    }
+
+    setProjects(defaultDemos);
+    localStorage.setItem('demo_projects', JSON.stringify(defaultDemos));
+    setLoading(false);
   };
 
   const handleCreateProject = async (titleToCreate?: string, type?: 'short-form' | 'long-form', g?: string) => {
